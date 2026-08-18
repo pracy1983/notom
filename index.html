@@ -1,0 +1,1260 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NoTom — treino de afinação vocal</title>
+<style>
+  :root{
+    --bg:#0c0f14; --panel:#141922; --panel2:#1b2230; --line:#28303f;
+    --txt:#e8edf5; --dim:#8e9aae;
+    --ok:#3ddc97; --warn:#ffd166; --bad:#ff6b6b; --acc:#5aa9ff; --vib:#c58cff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--txt);
+    font:14px/1.4 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  header{background:var(--panel);border-bottom:1px solid var(--line);padding:8px 12px}
+  .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .row+.row{margin-top:7px;padding-top:7px;border-top:1px dashed var(--line)}
+  h1{font-size:15px;margin:0 4px 0 0;font-weight:650}
+  .grp{display:flex;align-items:center;gap:6px}
+  .grp>label{color:var(--dim);font-size:12px;white-space:nowrap}
+  select,input[type=number],input[type=text],textarea{
+    background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+    border-radius:7px;padding:5px 7px;font:inherit;font-size:13px;
+  }
+  textarea{width:100%;resize:vertical;font-size:12px;line-height:1.45}
+  input[type=range]{width:90px;accent-color:var(--acc)}
+  input[type=checkbox]{accent-color:var(--acc)}
+  button{background:var(--acc);color:#04121f;border:0;border-radius:8px;
+    padding:7px 13px;font:inherit;font-weight:650;cursor:pointer}
+  button.ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--line);font-weight:500}
+  button.rec{background:var(--bad);color:#2a0000}
+  button.mini{padding:3px 7px;font-size:11px;font-weight:500}
+  main{flex:1;display:flex;min-height:0}
+  #wrap{flex:1;position:relative;min-width:0}
+  canvas{display:block;width:100%;height:100%}
+  aside{width:262px;flex:none;background:var(--panel);border-left:1px solid var(--line);
+    padding:12px;display:flex;flex-direction:column;gap:11px;overflow-y:auto}
+  aside section{border-top:1px solid var(--line);padding-top:10px}
+  aside section:first-child{border-top:0;padding-top:0}
+  .note{font-size:52px;font-weight:700;line-height:1;letter-spacing:-1px}
+  .note small{font-size:15px;color:var(--dim);font-weight:500;margin-left:6px}
+  .hz{color:var(--dim);font-size:11.5px;margin-top:2px}
+  .pct{font-size:38px;font-weight:700;line-height:1}
+  .cap{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim);margin-bottom:4px}
+  .bar{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;border-radius:99px}
+  .meter{position:relative;height:32px;background:var(--panel2);border-radius:8px;overflow:hidden}
+  .meter .zone{position:absolute;top:0;bottom:0;background:rgba(197,140,255,.16);left:50%;width:0;transform:translateX(-50%)}
+  .meter .mid{position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--line)}
+  .meter .nd{position:absolute;top:4px;bottom:4px;width:4px;border-radius:3px;left:50%;transform:translateX(-50%)}
+  .meter .lb{position:absolute;bottom:2px;font-size:9px;color:var(--dim)}
+  .tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:650;
+    background:var(--panel2);color:var(--dim)}
+  .kv{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);padding:2px 0}
+  .kv b{color:var(--txt);font-weight:600}
+  .take{display:flex;align-items:center;gap:6px;font-size:11.5px;padding:4px 0;border-bottom:1px solid #1f2735}
+  .take .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .take .sc{font-weight:700;width:34px;text-align:right}
+  .tbar{height:4px;background:var(--panel2);border-radius:99px;margin-top:3px;overflow:hidden}
+  .tbar>i{display:block;height:100%;background:var(--acc)}
+  #msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    text-align:center;padding:24px;color:var(--dim);pointer-events:none}
+  #msg.mini{align-items:flex-start;justify-content:flex-end;padding:10px;font-size:12px;text-align:right}
+  #msg.mini>div{background:rgba(12,15,20,.88);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+  .hint{font-size:10.5px;color:#6b7688;line-height:1.35}
+  /* ---- modo jogo ---- */
+  .gcard{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:5;
+    background:rgba(16,20,28,.95);border:1px solid var(--line);border-radius:12px;
+    padding:12px 16px;width:310px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  .gmodal{position:absolute;inset:0;z-index:6;display:flex;align-items:center;
+    justify-content:center;background:rgba(5,7,10,.72)}
+  .gmodal>div{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:18px;max-width:440px;width:92%;max-height:86%;overflow:auto}
+  .glv{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:12px}
+  .glv button{padding:8px 4px;display:flex;flex-direction:column;gap:2px;align-items:center;font-weight:700}
+  .glv button .st{font-size:10px;letter-spacing:1px}
+  .glv button.lock{background:var(--panel2);color:#5b6678;border:1px solid var(--line);cursor:default}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="row">
+    <h1>🎤 NoTom</h1>
+    <button id="btn">Ligar microfone</button>
+    <button class="ghost" id="gameBtn">🎮 Jogar</button>
+    <div class="grp"><label>Entrada</label>
+      <select id="mic" style="max-width:180px"><option value="">Microfone padrão</option></select>
+      <button class="ghost mini" id="refreshMic" title="Atualizar lista">↻</button>
+    </div>
+    <div class="grp"><label>Tom</label>
+      <select id="key"></select>
+      <select id="scale">
+        <option value="major">Maior</option>
+        <option value="minor">Menor natural</option>
+        <option value="hminor">Menor harmônica</option>
+        <option value="pentaM">Pentatônica maior</option>
+        <option value="pentam">Pentatônica menor</option>
+        <option value="blues">Blues</option>
+        <option value="chrom">Cromática (tudo)</option>
+      </select>
+      <label style="color:var(--txt)"><input type="checkbox" id="autoKey" checked> detectar</label>
+    </div>
+    <div class="grp"><label>Nomes</label>
+      <select id="naming"><option value="pt">Dó Ré Mi</option><option value="en">C D E</option></select>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="grp"><label>Vibrato: tolerância ±</label>
+      <input id="vibTol" type="range" min="10" max="150" value="60" step="5">
+      <span id="vibTolTxt" style="font-size:12px;width:40px">60¢</span>
+    </div>
+    <div class="grp"><label><input type="checkbox" id="lyrics"> Letra (beta)</label>
+      <select id="lyrLang" style="font-size:12px">
+        <option value="pt-BR">Português</option><option value="en-US">Inglês</option><option value="es-ES">Espanhol</option>
+      </select>
+      <label>atraso</label><input id="lyrLag" type="range" min="0" max="1200" step="50" value="450">
+      <span id="lyrLagTxt" style="font-size:12px;width:44px">450ms</span>
+    </div>
+    <div class="grp"><label>Lá4</label><input id="a4" type="number" value="440" min="415" max="465" style="width:60px"> Hz</div>
+    <div class="grp"><label>Sensib.</label><input id="gate" type="range" min="1" max="40" value="10"></div>
+    <div class="grp"><label>Zoom</label><input id="zoom" type="range" min="12" max="40" value="26"></div>
+    <div class="grp"><label title="Velocidade com que a trilha rola na tela">Rolagem</label><input id="speed" type="range" min="40" max="300" value="130"></div>
+    <button class="ghost" id="clear">Limpar</button>
+  </div>
+</header>
+
+<main>
+  <div id="wrap">
+    <canvas id="cv"></canvas>
+    <div id="msg">Clique em <b>&nbsp;Ligar microfone&nbsp;</b> e comece a cantar.<br>Use fone de ouvido pra evitar realimentação.</div>
+
+    <div id="gHud" class="gcard" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b id="gTitle">Fase 1</b><button class="ghost mini" id="gQuit" title="Sair do jogo">✕</button>
+      </div>
+      <div class="cap" id="gSub" style="margin-top:2px">—</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+        <div class="note" id="gNote" style="font-size:42px">—</div>
+        <button class="ghost mini" id="gHear">🔊 ouvir de novo</button>
+      </div>
+      <div class="bar" style="margin-top:9px;height:10px"><i id="gHold"></i></div>
+      <div class="hint" id="gInfo" style="margin-top:5px;font-size:12px">—</div>
+    </div>
+    <div id="gLevels" class="gmodal" style="display:none"></div>
+    <div id="gRes" class="gmodal" style="display:none"></div>
+  </div>
+
+  <aside>
+    <section>
+      <div class="cap">Nota detectada</div>
+      <div class="note" id="noteName">—<small id="noteAlt"></small></div>
+      <div class="hz" id="hz">—</div>
+    </section>
+
+    <section>
+      <div class="cap">Precisão da nota</div>
+      <div class="pct" id="pct">—</div>
+      <div class="bar" style="margin-top:6px"><i id="pctBar"></i></div>
+      <div class="hint" id="pctHint" style="margin-top:4px"></div>
+    </section>
+
+    <section>
+      <div class="cap">Desvio (cents)</div>
+      <div class="meter">
+        <div class="zone" id="zone"></div><div class="mid"></div><div class="nd" id="needle"></div>
+        <div class="lb" style="left:5px">-50 ♭</div><div class="lb" style="right:5px">♯ +50</div>
+      </div>
+      <div id="dirTxt" style="text-align:center;margin-top:5px;font-size:12px;color:var(--dim)">—</div>
+      <div style="margin-top:7px"><span class="tag" id="inkey">aguardando…</span></div>
+    </section>
+
+    <section>
+      <div class="cap">Vibrato</div>
+      <div id="vibTag"><span class="tag">nenhum</span></div>
+      <div class="kv"><span>Velocidade</span><b id="vRate">—</b></div>
+      <div class="kv"><span>Amplitude</span><b id="vExt">—</b></div>
+      <div class="kv"><span>Regularidade</span><b id="vReg">—</b></div>
+      <div class="tbar"><i id="vRegBar" style="width:0"></i></div>
+    </section>
+
+    <section>
+      <div class="cap">Tom detectado</div>
+      <div id="detKey" style="font-size:17px;font-weight:650">—</div>
+      <div class="hint" id="detInfo">cante alguns compassos…</div>
+      <div style="margin-top:6px"><button class="ghost mini" id="applyKey">Aplicar este tom</button></div>
+    </section>
+
+    <section>
+      <div class="cap">Sessão</div>
+      <div class="kv"><span>Média de precisão</span><b id="sAvg">—</b></div>
+      <div class="kv"><span>Tempo afinado</span><b id="sIn">—</b></div>
+      <div class="kv"><span>Dentro do tom</span><b id="sKey">—</b></div>
+      <div class="kv"><span>Notas cantadas</span><b id="sN">0</b></div>
+      <div class="kv"><span>Extensão</span><b id="sRange">—</b></div>
+    </section>
+
+    <section>
+      <div class="cap">Letra da música</div>
+      <textarea id="lyrTxt" rows="4" placeholder="Cole a letra aqui (ou carregue um .txt) e salve.&#10;Durante o canto ela rola embaixo e as palavras aparecem na trilha."></textarea>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="ghost mini" id="lyrSave">Salvar letra</button>
+        <button class="ghost mini" id="lyrFile">carregar .txt</button>
+        <input type="file" id="lyrFileIn" accept=".txt,text/plain" hidden>
+        <button class="ghost mini" id="lyrReset" title="Voltar ao começo da letra">↩ início</button>
+      </div>
+      <div class="hint" id="lyrInfo" style="margin-top:5px"></div>
+    </section>
+
+    <section>
+      <div class="cap">Tomadas</div>
+      <input type="text" id="song" list="songs" placeholder="Nome da música" style="width:100%">
+      <datalist id="songs"></datalist>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button id="recBtn" style="flex:1">● Gravar</button>
+        <button class="ghost mini" id="exp" title="Exportar tudo">⬇</button>
+      </div>
+      <div id="recInfo" class="hint" style="margin-top:5px"></div>
+      <label style="display:block;margin-top:8px;font-size:11.5px">
+        <input type="checkbox" id="ghostOn"> mostrar tomadas anteriores (nº na trilha)
+      </label>
+      <div id="takeList" style="margin-top:6px"></div>
+    </section>
+  </aside>
+</main>
+
+<script>
+'use strict';
+/* ================= notas / escalas ================= */
+const PT = ['Dó','Dó#','Ré','Ré#','Mi','Fá','Fá#','Sol','Sol#','Lá','Lá#','Si'];
+const EN = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const SCALES = {
+  major:[0,2,4,5,7,9,11], minor:[0,2,3,5,7,8,10], hminor:[0,2,3,5,7,8,11],
+  pentaM:[0,2,4,7,9], pentam:[0,3,5,7,10], blues:[0,3,5,6,7,10],
+  chrom:[0,1,2,3,4,5,6,7,8,9,10,11]
+};
+const SCALE_PT = {major:'maior',minor:'menor',hminor:'menor harmônica',
+  pentaM:'pentatônica maior',pentam:'pentatônica menor',blues:'blues',chrom:'cromática'};
+const IS_BLACK = m => [1,3,6,8,10].includes(pc(m));
+const pc = m => ((m%12)+12)%12;
+
+const $ = id => document.getElementById(id);
+const keySel=$('key'), scaleSel=$('scale'), namingSel=$('naming');
+EN.forEach((n,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=PT[i]+' ('+n+')'; keySel.appendChild(o); });
+keySel.value=0;
+
+const nameOf = m => (namingSel.value==='pt'?PT:EN)[pc(m)];
+const octOf  = m => Math.floor(m/12)-1;
+const label  = m => nameOf(m)+octOf(m);
+function scaleSet(){
+  const root=+keySel.value, s=new Set();
+  SCALES[scaleSel.value].forEach(i=>s.add((root+i)%12)); return s;
+}
+// tocar no tom manualmente desliga a detecção automática
+keySel.onchange = scaleSel.onchange = () => { $('autoKey').checked=false; };
+
+/* ================= estado ================= */
+let ctx=null, analyser=null, buf=null, stream=null, running=false, detTimer=null;
+let center=60, zoomPx=26, pxPerSec=130;
+const hist=[];                        // {t,midi,cents,pct,inKey,rms}
+let words=[];                         // {t,text}
+let stat=blankStat(), last=null, lastSeen=0, smMidi=null;
+let segNote=null, segFrames=0;
+const pcw = new Float32Array(12);     // histograma de classes de altura (p/ detectar tom)
+let pcTot=0, detected=null;
+let keyVote={cand:null,count:0}, keyApplied=null;   // estabilidade da detecção de tom
+let recording=false, takeStart=0, ghosts=[], freeStart=0;   // ghosts: tomadas de referência visíveis
+let panX=0, dragging=null, promptHits=[];                   // revisão (arraste) e clique na letra
+
+let wasVoiced=false, rmsPeak=0, rearmed=false;   // p/ detectar ataques de sílaba
+
+function blankStat(){ return {n:0,sum:0,in:0,tot:0,key:0,lo:null,hi:null,vib:0,vibSum:0}; }
+function resetAll(){
+  hist.length=0; words=[]; stat=blankStat(); pcw.fill(0); pcTot=0; detected=null;
+  segNote=null; segFrames=0; last=null; smMidi=null;
+  wasVoiced=false; rmsPeak=0; rearmed=false; lyrResetPos();
+  keyVote={cand:null,count:0}; keyApplied=null;
+  freeStart=performance.now()/1000;               // "Limpar" também reinicia as referências
+  panX=0;
+}
+$('clear').onclick = resetAll;
+$('zoom').oninput   = e => zoomPx=+e.target.value;
+$('speed').oninput  = e => pxPerSec=+e.target.value;
+$('vibTol').oninput = e => $('vibTolTxt').textContent=e.target.value+'¢';
+$('lyrLag').oninput = e => $('lyrLagTxt').textContent=e.target.value+'ms';
+
+/* ================= microfones ================= */
+const micSel=$('mic');
+async function listMics(){
+  if(!navigator.mediaDevices?.enumerateDevices) return;
+  let devs=[]; try{ devs=await navigator.mediaDevices.enumerateDevices(); }catch(e){ return; }
+  const ins=devs.filter(d=>d.kind==='audioinput'), keep=micSel.value;
+  micSel.innerHTML='<option value="">Microfone padrão do sistema</option>';
+  ins.forEach((d,i)=>{ const o=document.createElement('option');
+    o.value=d.deviceId; o.textContent=d.label||('Entrada '+(i+1)); micSel.appendChild(o); });
+  if([...micSel.options].some(o=>o.value===keep)) micSel.value=keep;
+}
+listMics();
+$('refreshMic').onclick=listMics;
+navigator.mediaDevices?.addEventListener?.('devicechange', listMics);
+micSel.onchange=async()=>{ if(!running) return; teardown(); if(!await openStream()) setOff(); };
+
+/* ================= captura ================= */
+async function openStream(){
+  const id=micSel.value;
+  const audio={echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1};
+  if(id) audio.deviceId={exact:id};
+  try{ stream=await navigator.mediaDevices.getUserMedia({audio}); }
+  catch(e){
+    if(id){
+      try{ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}}); micSel.value=''; }
+      catch(e2){ fail(e2); return false; }
+    } else { fail(e); return false; }
+  }
+  ctx=new (window.AudioContext||window.webkitAudioContext)(); await ctx.resume();
+  const src=ctx.createMediaStreamSource(stream);
+  const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=55; hp.Q.value=.7;
+  const lp=ctx.createBiquadFilter(); lp.type='lowpass';  lp.frequency.value=2200;
+  analyser=ctx.createAnalyser(); analyser.fftSize=4096; analyser.smoothingTimeConstant=0;
+  src.connect(hp); hp.connect(lp); lp.connect(analyser);
+  buf=new Float32Array(analyser.fftSize);
+  running=true; last=null; smMidi=null; panX=0;
+  freeStart=performance.now()/1000;               // linha do tempo p/ ver referências sem gravar
+  $('btn').textContent='Parar'; $('msg').style.display='none';
+  $('msg').classList.remove('mini'); cv.style.cursor='default';
+  clearInterval(detTimer); detTimer=setInterval(detect,22);
+  const tr=stream.getAudioTracks()[0];
+  if(tr) tr.onended=()=>{ if(running){ teardown(); setOff('O microfone foi desconectado.'); listMics(); } };
+  await listMics();
+  if($('lyrics').checked) startRec();
+  return true;
+  function fail(e){ $('msg').innerHTML='Não consegui acessar o microfone.<br><small>'+e.message+'</small>';
+                    $('msg').style.display='flex'; }
+}
+function teardown(){
+  running=false; clearInterval(detTimer); stopRec();
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  if(ctx) ctx.close();
+  ctx=null; analyser=null; stream=null; last=null; smMidi=null; closeSeg();
+  if(recording) finishTake();
+}
+function setOff(txt){
+  $('btn').textContent='Ligar microfone';
+  const m=$('msg');
+  if(hist.length){         // há canto gravado: vira modo revisão, aviso discreto no canto
+    m.classList.add('mini');
+    m.innerHTML='<div>'+(txt?txt+'<br>':'')+
+      '🖱️ arraste ou role pra rever o que cantou'+
+      (lyr?' · clique numa palavra da letra pra reposicionar':'')+'</div>';
+  }else{
+    m.classList.remove('mini');
+    m.innerHTML=(txt?txt+'<br>':'')+'Clique em <b>&nbsp;Ligar microfone&nbsp;</b> pra voltar.';
+  }
+  m.style.display='flex';
+  cv.style.cursor = hist.length ? 'grab' : 'default';
+}
+$('btn').onclick=async()=>{ if(running){ teardown(); setOff('Microfone desligado.'); } else await openStream(); };
+
+/* ================= detecção de pitch (YIN) ================= */
+const W=2048;
+function yin(x, sr, thr=0.12){
+  const tauMin=Math.max(2,Math.floor(sr/1100)), tauMax=Math.min(W-1,Math.floor(sr/62));
+  const d=new Float32Array(tauMax+1);
+  for(let tau=tauMin;tau<=tauMax;tau++){
+    let s=0; for(let j=0;j<W;j+=2){ const v=x[j]-x[j+tau]; s+=v*v; } d[tau]=s;
+  }
+  const cm=new Float32Array(tauMax+1); let run=0;
+  for(let tau=tauMin;tau<=tauMax;tau++){ run+=d[tau]; cm[tau]= run>0 ? d[tau]*(tau-tauMin+1)/run : 1; }
+  let best=-1;
+  for(let tau=tauMin+1;tau<tauMax;tau++) if(cm[tau]<thr && cm[tau]<=cm[tau+1]){ best=tau; break; }
+  if(best<0){ let m=Infinity;
+    for(let tau=tauMin+1;tau<tauMax;tau++) if(cm[tau]<m){ m=cm[tau]; best=tau; }
+    if(m>0.55) return null; }
+  const y0=d[best-1],y1=d[best],y2=d[best+1], den=2*(2*y1-y0-y2);
+  const tau = den!==0 ? best+(y2-y0)/den : best;
+  const f=sr/tau;
+  return (f>55&&f<1200) ? {f, conf:1-Math.min(1,cm[best])} : null;
+}
+
+/* ================= vibrato ================= */
+// Analisa a oscilação recente. Se for vibrato de verdade, a afinação passa a ser
+// julgada pelo CENTRO da oscilação — não pelo instante — então vibrar não "desafina".
+function analyzeVibrato(nowT){
+  const WIN=0.7, seg=[];
+  for(let i=hist.length-1;i>=0;i--){ if(nowT-hist[i].t>WIN) break; seg.unshift(hist[i]); }
+  if(seg.length<14) return null;
+  for(let i=1;i<seg.length;i++) if(seg[i].t-seg[i-1].t>0.07) return null;   // houve pausa: não é nota sustentada
+  const dur=seg[seg.length-1].t-seg[0].t;
+  if(dur<0.35) return null;
+
+  const mids=seg.map(s=>s.midi);
+  const mean=mids.reduce((a,b)=>a+b,0)/mids.length;
+  // janela larga demais = mudança de nota (legato), não vibrato
+  if(Math.max(...mids)-Math.min(...mids) > 2.5) return null;
+
+  // remove a tendência (portamento/subida gradual) antes de medir a onda
+  let sx=0,sy=0,sxy=0,sxx=0;
+  seg.forEach(s=>{ const x=s.t-seg[0].t, y=s.midi; sx+=x; sy+=y; sxy+=x*y; sxx+=x*x; });
+  const n=seg.length, den=n*sxx-sx*sx;
+  const slope = den!==0 ? (n*sxy-sx*sy)/den : 0;
+  const base  = (sy-slope*sx)/n;
+  const dev = seg.map(s=>{ const x=s.t-seg[0].t; return (s.midi-(base+slope*x))*100; }); // cents
+
+  // amplitude por RMS (robusta a picos isolados): p/ senoide, A = rms*sqrt(2)
+  const rmsDev=Math.sqrt(dev.reduce((a,d)=>a+d*d,0)/dev.length);
+  const extent=rmsDev*Math.SQRT2;
+
+  // cruzamentos com histerese → velocidade medida pelos instantes reais
+  const thr=Math.max(4, extent*0.35);
+  let sign = dev[0]>=0?1:-1; const times=[];
+  for(let i=0;i<dev.length;i++){
+    if(sign>0 && dev[i]<-thr){ sign=-1; times.push(interp(i)); }
+    else if(sign<0 && dev[i]>thr){ sign=1; times.push(interp(i)); }
+  }
+  function interp(i){                                  // instante exato do cruzamento
+    if(i===0) return seg[0].t;
+    const a=dev[i-1], b=dev[i], f = (a!==b) ? a/(a-b) : 0.5;
+    return seg[i-1].t + f*(seg[i].t-seg[i-1].t);
+  }
+  const cross=times.length;
+  const span = cross>=2 ? times[cross-1]-times[0] : 0;
+  const rate = span>0 ? ((cross-1)/2)/span : 0;
+
+  // regularidade: uniformidade dos meios-períodos
+  let reg=0;
+  if(cross>=3){
+    const hp=[]; for(let i=1;i<cross;i++) hp.push(times[i]-times[i-1]);
+    const mu=hp.reduce((a,b)=>a+b,0)/hp.length;
+    const cv=Math.sqrt(hp.reduce((a,b)=>a+(b-mu)*(b-mu),0)/hp.length)/(mu||1);
+    reg=Math.max(0,Math.min(100,100*(1-cv*1.6)));
+  }
+  const glide = Math.abs(slope*dur) > 0.8;             // subindo/descendo: é portamento
+  // faixa ampla de detecção: vibrato lento ou rápido também é vibrato — julgamos
+  // pelo centro e sinalizamos o defeito, em vez de acusar desafinação.
+  const active = extent>=12 && rate>=2.5 && rate<=12 && cross>=3 && !glide;
+  return {center:base+slope*dur, mean, extent, rate, reg, cross, active, glide, drift:slope*100};
+}
+
+/* ================= laço de detecção ================= */
+function detect(){
+  if(!running) return;
+  analyser.getFloatTimeDomainData(buf);
+  let rms=0; for(let i=0;i<buf.length;i++) rms+=buf[i]*buf[i];
+  rms=Math.sqrt(rms/buf.length);
+  const gate=(+$('gate').value)/1000, now=performance.now()/1000;
+
+  if(rms<gate){ if(now-lastSeen>0.18){ last=null; smMidi=null; closeSeg(); wasVoiced=false; rmsPeak=0; } return; }
+  const r=yin(buf,ctx.sampleRate);
+  if(!r){ if(now-lastSeen>0.18){ last=null; smMidi=null; closeSeg(); wasVoiced=false; rmsPeak=0; } return; }
+
+  // ataque de sílaba: voz voltando do silêncio, ou re-articulação (consoante derruba
+  // a energia e ela volta) — melisma (nota muda, vogal segue) NÃO conta sílaba nova
+  if(!wasVoiced){ lyrOnset(now); wasVoiced=true; rmsPeak=rms; rearmed=false; }
+  else{
+    rmsPeak=Math.max(rmsPeak*0.994, rms);
+    if(rms<rmsPeak*0.45) rearmed=true;
+    else if(rearmed && rms>rmsPeak*0.75){ lyrOnset(now); rearmed=false; rmsPeak=rms; }
+  }
+
+  const a4=+$('a4').value||440;
+  let midi=69+12*Math.log2(r.f/a4);
+  if(smMidi===null || Math.abs(midi-smMidi)>0.9) smMidi=midi; else smMidi=smMidi*0.6+midi*0.4;
+  midi=smMidi;
+  lastSeen=now;
+  hist.push({t:now, midi, cents:0, pct:0, inKey:true, rms});
+  while(hist.length && now-hist[0].t>90) hist.shift();
+
+  // ---- vibrato: define QUAL altura julgar ----
+  const vib=analyzeVibrato(now);
+  const tol=+$('vibTol').value;
+  const judge = (vib&&vib.active) ? vib.mean : midi;
+  const nearest=Math.round(judge), cents=(judge-nearest)*100;
+  const pct=Math.max(0,100-Math.abs(cents)*2);
+  const inKey=scaleSet().has(pc(nearest));
+  const vibWide = !!(vib&&vib.active&&vib.extent>tol);
+
+  const h=hist[hist.length-1];
+  h.cents=cents; h.pct=pct; h.inKey=inKey; h.vib=!!(vib&&vib.active);
+  last={f:r.f, midi, judge, nearest, cents, pct, inKey, conf:r.conf, rms, vib, vibWide, tol};
+
+  // histograma p/ detecção de tom (peso = tempo, ignora notas muito desafinadas)
+  if(Math.abs(cents)<38){ pcw[pc(nearest)]+=1; pcTot++; if(pcTot%12===0) detectKey(); }
+
+  if(lyr && lyr.pos>=0 && lyr.pos<lyr.words.length) lyr.acc.push(pct);   // placar da palavra atual
+
+  stat.tot++; stat.sum+=pct; if(Math.abs(cents)<15) stat.in++; if(inKey) stat.key++;
+  stat.lo = stat.lo===null?nearest:Math.min(stat.lo,nearest);
+  stat.hi = stat.hi===null?nearest:Math.max(stat.hi,nearest);
+  if(vib&&vib.active){ stat.vib++; stat.vibSum+=vib.reg; }
+  if(segNote===nearest) segFrames++; else { closeSeg(); segNote=nearest; segFrames=1; }
+  center += (midi-center)*0.06;
+  gameTick(now);
+}
+function closeSeg(){ if(segNote!==null&&segFrames>=5) stat.n++; segNote=null; segFrames=0; }
+
+/* ================= detecção de tom (Krumhansl-Schmuckler) ================= */
+const PROF={
+  major:[6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88],
+  minor:[6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17]
+};
+function corr(a,b){
+  const ma=a.reduce((x,y)=>x+y,0)/12, mb=b.reduce((x,y)=>x+y,0)/12;
+  let num=0,da=0,db=0;
+  for(let i=0;i<12;i++){ const x=a[i]-ma, y=b[i]-mb; num+=x*y; da+=x*x; db+=y*y; }
+  return (da&&db) ? num/Math.sqrt(da*db) : 0;
+}
+function detectKey(){
+  if(pcTot<60) return;
+  const w=[...pcw], out=[];
+  for(const mode of ['major','minor'])
+    for(let root=0;root<12;root++){
+      const rot=Array.from({length:12},(_,i)=>PROF[mode][(i-root+12)%12]);
+      out.push({root,mode,r:corr(w,rot)});
+    }
+  out.sort((a,b)=>b.r-a.r);
+  const top=out[0], gap=top.r-out[1].r;
+  // contraste tonal: sem uma nota claramente predominante a correlação é aleatória
+  const mean=pcTot/12, contrast=Math.max(...w)/(mean||1);
+
+  // voto de estabilidade: o mesmo tom precisa vencer várias avaliações seguidas
+  const same = keyVote.cand && keyVote.cand.root===top.root && keyVote.cand.mode===top.mode;
+  keyVote = same ? {cand:top, count:keyVote.count+1} : {cand:top, count:1};
+
+  // só atualiza o painel quando o candidato se firmou (3 vitórias seguidas)
+  if(keyVote.count>=3 || !detected)
+    detected={...top, gap, frames:pcTot, contrast, stable:keyVote.count};
+  else detected={...detected, frames:pcTot, stable:keyVote.count};
+
+  // aplicar: exige história longa e consistente; depois de aplicado, trava —
+  // só troca se OUTRO tom dominar com folga por muito mais tempo
+  const need = keyApplied ? 18 : 8;
+  if($('autoKey').checked && pcTot>200 && keyVote.count>=need &&
+     top.r>0.65 && gap>0.04 && contrast>1.8){
+    const sc = top.mode==='major'?'major':'minor';
+    if(+keySel.value!==top.root || scaleSel.value!==sc){
+      keySel.value=top.root; scaleSel.value=sc;    // atribuição direta não dispara onchange
+    }
+    keyApplied={root:top.root,mode:top.mode};
+  }
+}
+$('applyKey').onclick=()=>{
+  if(!detected) return;
+  keySel.value=detected.root; scaleSel.value = detected.mode==='major'?'major':'minor';
+  $('autoKey').checked=false;
+};
+
+/* ================= letra (Web Speech API) ================= */
+let rec=null, stampedCount=0, recStatus='desligado';
+const REC_ERR={ network:'sem conexão com o serviço de voz (precisa de internet)',
+  'not-allowed':'permissão negada', 'service-not-allowed':'serviço bloqueado',
+  'no-speech':'nenhuma fala detectada', 'audio-capture':'sem acesso ao microfone',
+  aborted:'interrompido', 'language-not-supported':'idioma não suportado' };
+function startRec(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ $('lyrics').checked=false; recStatus='navegador sem suporte — use o Chrome'; return; }
+  stopRec();
+  rec=new SR(); rec.lang=$('lyrLang').value; rec.continuous=true; rec.interimResults=true;
+  stampedCount=0; recStatus='iniciando…';
+  rec.onstart=()=>{ recStatus='ouvindo ('+rec.lang+')'; };
+  rec.onaudiostart=()=>{ recStatus='ouvindo ('+rec.lang+')'; };
+  rec.onresult=e=>{
+    const toks=[];
+    for(let i=0;i<e.results.length;i++) toks.push(...e.results[i][0].transcript.trim().split(/\s+/).filter(Boolean));
+    const t=performance.now()/1000 - (+$('lyrLag').value)/1000;
+    if(toks.length<stampedCount) stampedCount=toks.length;      // revisão encurtou o texto
+    while(stampedCount<toks.length){
+      const tok=toks[stampedCount]; stampedCount++;
+      if(lyr) lyrSnap(tok,t);                    // com letra: só confirma/realinha posição
+      else words.push({t, text:tok});            // sem letra: carimba o que entendeu
+    }
+  };
+  rec.onend=()=>{ if($('lyrics').checked&&running) try{ rec.start(); }catch(e){} };   // reinicia sozinho
+  rec.onerror=e=>{
+    recStatus='erro: '+(REC_ERR[e.error]||e.error);
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){ $('lyrics').checked=false; stopRec(); }
+  };
+  try{ rec.start(); }catch(e){ recStatus='erro ao iniciar: '+e.message; }
+}
+function stopRec(){ if(rec){ rec.onend=null; try{ rec.stop(); }catch(e){} rec=null; } recStatus='desligado'; }
+$('lyrics').onchange=e=>{ if(e.target.checked){ if(running) startRec(); } else stopRec(); };
+$('lyrLang').onchange=()=>{ if($('lyrics').checked&&running) startRec(); };
+
+/* ================= letra sincronizada ================= */
+const LSL='afinador.lyrics.v1';
+const loadLyrDB=()=>{ try{ return JSON.parse(localStorage.getItem(LSL))||{}; }catch(e){ return {}; } };
+const saveLyrDB=db=>localStorage.setItem(LSL,JSON.stringify(db));
+let lyr=null;   // {words:[{raw,norm,syl}], pos, syl, scores[], acc[]}
+
+const normW=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+const sylCount=w=>{ const m=normW(w).match(/[aeiouy]+/g); return m?m.length:1; };
+
+function buildLyrics(){
+  const txt=(loadLyrDB()[songName()]||'').trim();
+  if(!txt){ lyr=null; return; }
+  const ws=txt.split(/\s+/).filter(Boolean);
+  lyr={ words:ws.map(w=>({raw:w, norm:normW(w), syl:sylCount(w)})),
+        pos:-1, syl:0, scores:new Array(ws.length).fill(null), acc:[] };
+}
+function lyrResetPos(){ if(!lyr) return; lyr.pos=-1; lyr.syl=0; lyr.acc=[]; lyr.scores.fill(null); }
+
+// ataque de sílaba vindo do áudio: avança dentro da palavra; completou as sílabas → próxima
+function lyrOnset(now){
+  if(!lyr) return;
+  const cur = lyr.pos>=0 && lyr.pos<lyr.words.length ? lyr.words[lyr.pos] : null;
+  if(cur){ lyr.syl++; if(lyr.syl>=cur.syl) advanceWord(now); }
+  else if(lyr.pos<0) advanceWord(now);          // primeira sílaba cantada = primeira palavra
+}
+function advanceWord(now, to){
+  if(!lyr) return;
+  closeWordScore();
+  lyr.pos = (to!==undefined)? to : lyr.pos+1;
+  lyr.syl=0; lyr.acc=[];
+  if(lyr.pos<lyr.words.length) words.push({t:now, text:lyr.words[lyr.pos].raw});
+}
+function closeWordScore(){
+  if(!lyr || lyr.pos<0 || lyr.pos>=lyr.words.length) return;
+  if(lyr.acc.length) lyr.scores[lyr.pos]=lyr.acc.reduce((a,b)=>a+b,0)/lyr.acc.length;
+}
+
+// reconhecimento de fala confirma onde estamos: procura o token numa janela à frente.
+// Janela larga (14) p/ quando a cantora está adiantada; se a mesma palavra existir
+// mais de uma vez, fica com a ocorrência mais próxima da posição atual.
+function lyrSnap(tok,t){
+  const n=normW(tok); if(!n||!lyr) return;
+  const from=Math.max(0,lyr.pos), to=Math.min(lyr.words.length-1, Math.max(0,lyr.pos)+14);
+  for(let j=from;j<=to;j++){
+    if(wordMatch(n,lyr.words[j].norm)){ if(j>lyr.pos) advanceWord(t,j); return; }
+  }
+}
+function wordMatch(a,b){
+  if(!a||!b) return false;
+  if(a===b) return true;
+  if(a.length>=3&&b.length>=3&&(a.startsWith(b)||b.startsWith(a))) return true;
+  if(Math.min(a.length,b.length)>=4) return lev1(a,b);
+  return false;
+}
+function lev1(a,b){                              // distância de edição ≤1?
+  if(Math.abs(a.length-b.length)>1) return false;
+  if(a.length===b.length){ let d=0; for(let i=0;i<a.length;i++) if(a[i]!==b[i]&&++d>1) return false; return true; }
+  const [s,l]=a.length<b.length?[a,b]:[b,a];
+  let i=0,j=0,d=0;
+  while(i<s.length){ if(s[i]===l[j]){i++;j++;} else { if(++d>1) return false; j++; } }
+  return true;
+}
+
+function loadLyricsUI(){
+  $('lyrTxt').value = loadLyrDB()[songName()]||'';
+  buildLyrics();
+}
+$('lyrSave').onclick=()=>{
+  const nm=songName();
+  if(!nm){ $('song').focus(); $('lyrInfo').textContent='Dê um nome à música primeiro.'; return; }
+  const db=loadLyrDB(), txt=$('lyrTxt').value.trim();
+  if(txt) db[nm]=txt; else delete db[nm];
+  saveLyrDB(db); buildLyrics();
+  $('lyrInfo').textContent = txt ? 'Letra salva ✓ ('+lyr.words.length+' palavras)' : 'Letra removida.';
+};
+$('lyrFile').onclick=()=>$('lyrFileIn').click();
+$('lyrFileIn').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  $('lyrTxt').value=await f.text(); e.target.value='';
+  $('lyrInfo').textContent='Arquivo carregado — clique em Salvar letra.';
+};
+$('lyrReset').onclick=()=>{ lyrResetPos(); };
+
+/* ================= tomadas (localStorage) ================= */
+const LS='afinador.songs.v1';
+const loadDB =()=>{ try{ return JSON.parse(localStorage.getItem(LS))||{}; }catch(e){ return {}; } };
+const saveDB = db => localStorage.setItem(LS, JSON.stringify(db));
+
+function refreshSongs(){
+  const dl=$('songs'); dl.innerHTML='';
+  const names=new Set([...Object.keys(loadDB()), ...Object.keys(loadLyrDB())]);
+  [...names].sort().forEach(n=>{ const o=document.createElement('option'); o.value=n; dl.appendChild(o); });
+}
+function songName(){ return ($('song').value||'').trim(); }
+
+$('recBtn').onclick=()=>{
+  if(recording){ finishTake(); return; }
+  if(!songName()){ $('song').focus(); $('recInfo').textContent='Dê um nome à música primeiro.'; return; }
+  if(!running){ $('recInfo').textContent='Ligue o microfone primeiro.'; return; }
+  resetAll();
+  recording=true; takeStart=performance.now()/1000;
+  $('recBtn').textContent='■ Parar e salvar'; $('recBtn').className='rec';
+};
+function finishTake(){
+  if(!recording) return;
+  recording=false;
+  $('recBtn').textContent='● Gravar'; $('recBtn').className='';
+  const dur=performance.now()/1000-takeStart;
+  if(stat.tot<20 || dur<1.5){ $('recInfo').textContent='Tomada muito curta — descartada.'; return; }
+  const db=loadDB(), nm=songName();
+  (db[nm] = db[nm]||[]).push({
+    date:new Date().toISOString(), dur:+dur.toFixed(2),
+    key:+keySel.value, scale:scaleSel.value, a4:+$('a4').value,
+    avg:+(stat.sum/stat.tot).toFixed(1),
+    inTune:+(stat.in/stat.tot*100).toFixed(1),
+    inKey:+(stat.key/stat.tot*100).toFixed(1),
+    notes:stat.n, lo:stat.lo, hi:stat.hi,
+    vibReg: stat.vib? +(stat.vibSum/stat.vib).toFixed(0) : null,
+    pts: hist.map(p=>[+(p.t-takeStart).toFixed(3), +p.midi.toFixed(3), Math.round(p.cents)]),
+    words: words.map(w=>[+(w.t-takeStart).toFixed(2), w.text]),
+    wordScores: (closeWordScore(), lyr)? lyr.words.map((w,i)=>[w.raw, lyr.scores[i]===null?null:Math.round(lyr.scores[i])]) : null
+  });
+  saveDB(db); refreshSongs(); renderTakes();
+  $('recInfo').textContent='Tomada salva ✓';
+}
+$('song').oninput=()=>{ renderTakes(); loadLyricsUI(); };
+$('ghostOn').onchange=e=>{ if(!e.target.checked) ghosts=[]; renderTakes(); };
+
+function renderTakes(){
+  const box=$('takeList'), db=loadDB(), list=db[songName()]||[];
+  box.innerHTML='';
+  if(!list.length){ box.innerHTML='<div class="hint">Nenhuma tomada salva para esta música.</div>';
+                    ghosts=[]; return; }
+  const bestI = list.reduce((b,t,i)=> t.avg>list[b].avg? i:b, 0);
+  // referências têm de pertencer à música atual (senão sobra da anterior)
+  ghosts = ghosts.filter(gt=>list.some(t=>t.date===gt.date));
+  if($('ghostOn').checked && !ghosts.length) ghosts=[list[bestI]];
+  list.forEach((t,i)=>{
+    const d=new Date(t.date);
+    const row=document.createElement('div'); row.className='take';
+    const gIdx = ghosts.findIndex(gt=>gt.date===t.date);
+    row.innerHTML=
+      '<div class="nm">#'+(i+1)+' · '+d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+
+        d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+
+        (i===bestI?' 🏆':'')+'<div class="tbar"><i style="width:'+t.avg+'%"></i></div></div>'+
+      '<div class="sc" style="color:'+(t.avg>85?'var(--ok)':t.avg>70?'var(--warn)':'var(--bad)')+'">'+t.avg.toFixed(0)+'%</div>';
+    const b1=document.createElement('button'); b1.className='ghost mini';
+    b1.textContent = gIdx>=0 ? '👁'+(gIdx+1) : '○';
+    b1.title='mostrar/ocultar esta tomada na trilha';
+    b1.onclick=()=>{
+      if(gIdx>=0) ghosts.splice(gIdx,1); else { t.num=i+1; ghosts.push(t); }
+      $('ghostOn').checked = ghosts.length>0; renderTakes();
+    };
+    t.num=i+1;
+    const b2=document.createElement('button'); b2.className='ghost mini'; b2.textContent='🗑';
+    b2.onclick=()=>{ const db2=loadDB(); db2[songName()].splice(i,1);
+      if(!db2[songName()].length) delete db2[songName()];
+      saveDB(db2); ghosts=ghosts.filter(gt=>gt.date!==t.date); refreshSongs(); renderTakes(); };
+    row.append(b1,b2); box.appendChild(row);
+  });
+  const avgs=list.map(t=>t.avg);
+  const trend = avgs.length>1 ? (avgs[avgs.length-1]-avgs[0]) : 0;
+  const info=document.createElement('div'); info.className='hint'; info.style.marginTop='6px';
+  info.textContent='Evolução: '+avgs[0].toFixed(0)+'% → '+avgs[avgs.length-1].toFixed(0)+'%'+
+    (avgs.length>1 ? '  ('+(trend>=0?'+':'')+trend.toFixed(0)+' pts em '+avgs.length+' tomadas)' : '');
+  box.appendChild(info);
+}
+$('exp').onclick=()=>{
+  const blob=new Blob([JSON.stringify(loadDB(),null,1)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='afinador-tomadas.json'; a.click(); URL.revokeObjectURL(a.href);
+};
+refreshSongs(); renderTakes(); loadLyricsUI();
+
+/* ================= modo jogo ================= */
+const GLS='afinador.game.v1', NLEVELS=20;
+const gload=()=>{ try{ return JSON.parse(localStorage.getItem(GLS))||{stars:{}}; }catch(e){ return {stars:{}}; } };
+const gsave=p=>localStorage.setItem(GLS,JSON.stringify(p));
+let game=null, gLastT=0;
+
+// dificuldade progressiva: segurar mais tempo, tolerância mais apertada, mais notas por fase
+function levelParams(n){
+  return {
+    hold:+(2+Math.min(3,(n-1)*0.3)).toFixed(1),          // 2s → 5s
+    tol: Math.max(12, Math.round(35-(n-1)*1.2)),         // ±35¢ → ±12¢
+    notes:Math.min(5, 1+Math.floor((n-1)/4)),            // 1 → 5 notas
+    span: Math.min(9, 3+Math.floor(n/3))                 // saltos maiores nas fases altas
+  };
+}
+// sorteia notas perto da região que a pessoa realmente canta
+function voiceCenter(){
+  if(stat.lo!==null && stat.hi!==null) return Math.round((stat.lo+stat.hi)/2);
+  return 60;                                             // Dó4 até conhecermos a voz
+}
+function genTargets(p){
+  const c=Math.max(50,Math.min(76,voiceCenter())), t=[];
+  let cur=c+Math.floor(Math.random()*5)-2;
+  for(let i=0;i<p.notes;i++){
+    if(i>0){
+      let nxt,guard=0;
+      do{ nxt=cur+Math.floor(Math.random()*(2*p.span+1))-p.span; guard++; }
+      while((nxt===cur||Math.abs(nxt-c)>7)&&guard<40);
+      cur=nxt;
+    }
+    t.push(Math.max(48,Math.min(79,cur)));
+  }
+  return t;
+}
+
+let toneCtx=null;
+function playTone(midi,dur=1.4){
+  const ac = ctx || (toneCtx=toneCtx||new (window.AudioContext||window.webkitAudioContext)());
+  if(ac.state==='suspended') ac.resume();
+  const a4=+$('a4').value||440, f=a4*Math.pow(2,(midi-69)/12);
+  const o=ac.createOscillator(), gn=ac.createGain(), t=ac.currentTime;
+  o.type='sine'; o.frequency.value=f;
+  gn.gain.setValueAtTime(0,t); gn.gain.linearRampToValueAtTime(.22,t+.05);
+  gn.gain.setValueAtTime(.22,t+dur-.25); gn.gain.linearRampToValueAtTime(0,t+dur);
+  o.connect(gn); gn.connect(ac.destination); o.start(t); o.stop(t+dur);
+}
+
+async function gameStart(n){
+  if(!running){ if(!await openStream()) return; }
+  const p=levelParams(n);
+  game={level:n,p,targets:genTargets(p),idx:0,held:0,out:0,sum:0,cnt:0,
+        noteScores:[],state:'sing',muteUntil:0};
+  gLastT=0;
+  $('gRes').style.display='none'; $('gLevels').style.display='none';
+  $('gHud').style.display='block';
+  playTarget();
+}
+function playTarget(){
+  game.muteUntil=performance.now()/1000+1.6;   // não julgar enquanto o tom de referência toca
+  playTone(game.targets[game.idx],1.4);
+}
+function gameQuit(){ game=null; $('gHud').style.display='none'; $('gRes').style.display='none'; }
+$('gQuit').onclick=gameQuit;
+$('gHear').onclick=()=>{ if(game&&game.state==='sing') playTarget(); };
+$('gameBtn').onclick=renderLevels;
+
+// chamado a cada quadro de detecção (22ms) com voz detectada
+function gameTick(now){
+  if(!game||game.state!=='sing') return;
+  const dt = gLastT? Math.min(0.06,now-gLastT) : 0.022;
+  gLastT=now;
+  if(now<game.muteUntil || !last) return;
+  const tgt=game.targets[game.idx];
+  const dc=(last.midi-tgt)*100;                // cents em relação ao alvo
+  if(Math.abs(dc)<=game.p.tol){
+    game.held+=dt; game.out=0;
+    game.sum+=Math.max(0,100-Math.abs(dc)*2); game.cnt++;
+  }else{
+    game.out+=dt;
+    if(game.out>0.35) game.held=0;             // saiu da nota: recomeça a segurar
+  }
+  if(game.held>=game.p.hold){
+    game.noteScores.push(game.cnt?game.sum/game.cnt:0);
+    game.idx++; game.held=0; game.out=0; game.sum=0; game.cnt=0;
+    if(game.idx>=game.targets.length) gameFinish(); else playTarget();
+  }
+}
+function gameFinish(){
+  const avg=game.noteScores.reduce((a,b)=>a+b,0)/game.noteScores.length;
+  const stars = avg>=90?3 : avg>=80?2 : 1;
+  const prog=gload();
+  prog.stars[game.level]=Math.max(prog.stars[game.level]||0,stars);
+  gsave(prog);
+  game.state='done'; game.result={avg,stars};
+  showResult();
+}
+function showResult(){
+  const r=game.result, box=$('gRes');
+  const next=game.level+1, canNext=r.stars>=3&&next<=NLEVELS;
+  box.innerHTML='<div style="text-align:center">'+
+    '<div style="font-size:44px;letter-spacing:5px;color:#ffd166">'+'★'.repeat(r.stars)+
+      '<span style="color:#3a4356">'+'☆'.repeat(3-r.stars)+'</span></div>'+
+    '<div style="font-size:24px;font-weight:700;margin-top:4px">'+r.avg.toFixed(1)+'%</div>'+
+    '<div class="hint" style="margin-top:6px;font-size:12px">'+
+      (r.stars>=3?'Fase '+game.level+' concluída — próxima liberada!':'São precisas 3 ★ (média ≥90%) pra liberar a próxima.')+'</div>'+
+    '<div style="display:flex;gap:8px;justify-content:center;margin-top:16px">'+
+      '<button class="ghost" id="gAgain">↻ Repetir</button>'+
+      (canNext?'<button id="gNext">Próxima ▶</button>':'')+
+      '<button class="ghost" id="gMenu">Fases</button></div></div>';
+  box.style.display='flex'; $('gHud').style.display='none';
+  $('gAgain').onclick=()=>gameStart(game.level);
+  if(canNext) $('gNext').onclick=()=>gameStart(next);
+  $('gMenu').onclick=()=>{ game=null; box.style.display='none'; renderLevels(); };
+}
+function renderLevels(){
+  const prog=gload(), box=$('gLevels');
+  let html='<div><div style="display:flex;justify-content:space-between;align-items:center">'+
+    '<b style="font-size:16px">🎮 Treino de pitch — fases</b><button class="ghost mini" id="gClose">✕</button></div>'+
+    '<div class="hint" style="margin-top:6px">Ele toca uma nota, você canta e <b>segura</b> ela cravada. '+
+    '3 ★ (média ≥90%) liberam a próxima fase. As notas são sorteadas na sua região vocal — '+
+    'cante um pouco antes pra ele conhecer sua voz.</div><div class="glv">';
+  for(let n=1;n<=NLEVELS;n++){
+    const st=prog.stars[n]||0;
+    const unlocked = n===1 || (prog.stars[n-1]||0)>=3;
+    const p=levelParams(n);
+    html += unlocked
+      ? '<button data-l="'+n+'" title="segure '+p.hold+'s · ±'+p.tol+'¢ · '+p.notes+' nota(s)">'+n+
+        '<span class="st" style="color:#ffd166">'+'★'.repeat(st)+'☆'.repeat(3-st)+'</span></button>'
+      : '<button class="lock" title="faça 3 ★ na fase anterior">🔒<span class="st">'+n+'</span></button>';
+  }
+  html+='</div></div>';
+  box.innerHTML=html; box.style.display='flex';
+  box.querySelectorAll('button[data-l]').forEach(b=>b.onclick=()=>gameStart(+b.dataset.l));
+  $('gClose').onclick=()=>box.style.display='none';
+}
+// HUD do jogo (atualizado pelo laço de desenho)
+function updateGameHud(){
+  if(!game||game.state!=='sing') return;
+  const p=game.p, tgt=game.targets[game.idx];
+  $('gTitle').textContent='Fase '+game.level;
+  $('gSub').textContent='nota '+(game.idx+1)+' de '+p.notes+' · segure '+p.hold+'s · tolerância ±'+p.tol+'¢';
+  $('gNote').textContent=label(tgt);
+  const frac=Math.min(1,game.held/p.hold);
+  $('gHold').style.width=(frac*100)+'%';
+  $('gHold').style.background = frac>0 ? 'var(--ok)' : 'var(--acc)';
+  const dc = last ? (last.midi-tgt)*100 : null;
+  $('gInfo').textContent =
+    performance.now()/1000<game.muteUntil ? '👂 ouça a nota…'
+    : dc===null ? '🎤 cante '+label(tgt)+'…'
+    : Math.abs(dc)<=p.tol ? '✓ segure!  ('+(dc>0?'+':'')+dc.toFixed(0)+'¢)'
+    : dc>0 ? '▼ desça '+dc.toFixed(0)+'¢' : '▲ suba '+(-dc).toFixed(0)+'¢';
+  const c = dc===null?'#6b7688':Math.abs(dc)<=p.tol?'#3ddc97':'#ffd166';
+  $('gInfo').style.color=c;
+}
+
+/* ================= desenho ================= */
+const cv=$('cv'), g=cv.getContext('2d');
+let Wc=0,Hc=0;
+function fit(){
+  const r=cv.getBoundingClientRect(), dpr=Math.min(2,devicePixelRatio||1);
+  cv.width=Math.round(r.width*dpr); cv.height=Math.round(r.height*dpr);
+  Wc=r.width; Hc=r.height; g.setTransform(dpr,0,0,dpr,0,0);
+}
+new ResizeObserver(fit).observe(cv); fit();
+
+/* ---- arraste/rolagem (revisão) e clique na letra ---- */
+cv.style.touchAction='none';
+function clampPan(p){
+  if(!hist.length) return 0;
+  return Math.max(0, Math.min(hist[hist.length-1].t-hist[0].t, p));
+}
+cv.addEventListener('pointerdown',e=>{
+  dragging={x:e.clientX,y:e.clientY,panX,center,moved:false};
+  cv.setPointerCapture(e.pointerId);
+  if(!running && hist.length) cv.style.cursor='grabbing';
+});
+cv.addEventListener('pointermove',e=>{
+  if(!dragging) return;
+  const dx=e.clientX-dragging.x, dy=e.clientY-dragging.y;
+  if(Math.abs(dx)+Math.abs(dy)>5) dragging.moved=true;
+  if(!running){                       // horizontal = tempo, vertical = altura
+    panX=clampPan(dragging.panX + dx/pxPerSec);
+    center=dragging.center + dy/zoomPx;
+  }
+});
+cv.addEventListener('pointerup',e=>{
+  const d=dragging; dragging=null;
+  if(!running && hist.length) cv.style.cursor='grab';
+  if(d && !d.moved) handleCanvasClick(e);
+});
+cv.addEventListener('wheel',e=>{
+  if(running || !hist.length) return;
+  e.preventDefault();
+  panX=clampPan(panX + (e.deltaY+e.deltaX)/pxPerSec*0.7);
+},{passive:false});
+
+function handleCanvasClick(e){
+  const r=cv.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+  if(lyr && lyr.words.length && y>=Hc-44){          // clique no teleprompter
+    for(const h of promptHits)
+      if(x>=h.x0-4 && x<=h.x1+4){ jumpToWord(h.i); return; }
+  }
+}
+function jumpToWord(i){
+  if(!lyr || i<0 || i>=lyr.words.length) return;
+  closeWordScore();
+  lyr.pos=i; lyr.syl=0; lyr.acc=[];
+  if(running) words.push({t:performance.now()/1000, text:lyr.words[i].raw});
+}
+
+const KEYW=96;
+const y2 = m => Hc/2-(m-center)*zoomPx;
+const colorFor = c => Math.abs(c)<15?'#3ddc97':Math.abs(c)<30?'#ffd166':'#ff6b6b';
+
+function draw(){
+  requestAnimationFrame(draw);
+  const rtNow=performance.now()/1000;
+  // mic desligado com história: congela a linha do tempo e deixa o arraste (panX) navegar
+  const now = running ? rtNow : (hist.length ? hist[hist.length-1].t - panX : rtNow);
+  const sc=scaleSet(), nowX=Wc-170;
+  g.fillStyle='#0c0f14'; g.fillRect(0,0,Wc,Hc);
+  const lo=Math.floor(center-Hc/2/zoomPx)-1, hi=Math.ceil(center+Hc/2/zoomPx)+1;
+
+  // faixas das notas
+  for(let m=lo;m<=hi;m++){
+    const yc=y2(m), h=zoomPx, inK=sc.has(pc(m));
+    g.fillStyle = inK ? (IS_BLACK(m)?'rgba(90,169,255,.10)':'rgba(90,169,255,.16)') : 'rgba(255,255,255,.02)';
+    g.fillRect(KEYW,yc-h/2,Wc-KEYW,h);
+    g.strokeStyle = inK?'rgba(90,169,255,.45)':'rgba(255,255,255,.06)';
+    g.lineWidth=1; g.beginPath(); g.moveTo(KEYW,yc+.5); g.lineTo(Wc,yc+.5); g.stroke();
+    g.strokeStyle='rgba(255,255,255,.05)'; g.beginPath();
+    g.moveTo(KEYW,yc-h/2+.5); g.lineTo(Wc,yc-h/2+.5); g.stroke();
+    if(pc(m)===0){ g.strokeStyle='rgba(255,255,255,.14)'; g.beginPath();
+      g.moveTo(KEYW,yc+h/2+.5); g.lineTo(Wc,yc+h/2+.5); g.stroke(); }
+  }
+
+  // tomadas de referência (apagadas, numeradas). Alinham pelo início da gravação;
+  // fora de gravação, pelo momento em que o mic ligou (dá pra "assistir" a tomada).
+  if(ghosts.length){
+    const el = now - (recording? takeStart : freeStart);
+    ghosts.forEach((gt,gi)=>{
+      g.strokeStyle='rgba(255,255,255,'+(0.34-gi*0.07)+')';
+      g.lineWidth=6; g.lineCap='round'; g.beginPath();
+      let started=false, lab=null;
+      for(const [t,m] of gt.pts){
+        const x=nowX-(el-t)*pxPerSec; if(x<KEYW||x>Wc){ started=false; continue; }
+        const y=y2(m);
+        if(started) g.lineTo(x,y); else { g.moveTo(x,y); started=true; }
+        if(!lab || x>lab.x) lab={x,y};              // ponto mais à direita visível
+      }
+      g.stroke(); g.lineCap='butt';
+      if(lab){                                       // número da tomada na ponta da linha
+        g.fillStyle='rgba(255,255,255,.55)'; g.font='700 11px ui-sans-serif,system-ui';
+        g.fillText('#'+(gt.num||gi+1), Math.min(lab.x+6,Wc-24), lab.y-8);
+      }
+    });
+  }
+
+  // alvo do jogo: faixa dourada de tolerância em volta da nota pedida
+  if(game && game.state==='sing'){
+    const tgt=game.targets[game.idx], yc=y2(tgt);
+    const tolPx=Math.max(3, game.p.tol/100*zoomPx);
+    g.fillStyle='rgba(255,209,102,.14)'; g.fillRect(KEYW,yc-tolPx,Wc-KEYW,tolPx*2);
+    g.strokeStyle='#ffd166'; g.lineWidth=1.5; g.setLineDash([7,5]);
+    g.beginPath(); g.moveTo(KEYW,yc+.5); g.lineTo(Wc,yc+.5); g.stroke(); g.setLineDash([]);
+    g.fillStyle='#ffd166'; g.font='700 12px ui-sans-serif,system-ui';
+    g.fillText('🎯 '+label(tgt), KEYW+8, yc-tolPx-5);
+  }
+
+  // trilha cantada (linha instantânea = mostra a onda do vibrato)
+  g.lineWidth=3; g.lineJoin='round';
+  let prev=null;
+  const t0 = recording? takeStart : null;
+  const X = p => nowX-(now-p.t)*pxPerSec;
+  for(const p of hist){
+    const x=X(p); if(x<KEYW-20){ prev=null; continue; } if(x>Wc) continue;
+    const y=y2(p.midi);
+    if(prev && x-prev.x<14 && Math.abs(y-prev.y)<zoomPx*2){
+      g.strokeStyle = p.vib ? '#c58cff' : colorFor(p.cents);
+      g.beginPath(); g.moveTo(prev.x,prev.y); g.lineTo(x,y); g.stroke();
+    }
+    if(!p.inKey){ g.globalAlpha=.55; g.fillStyle='#ff6b6b'; g.fillRect(x-1.5,y-1.5,3,3); g.globalAlpha=1; }
+    prev={x,y};
+  }
+
+  // palavras da letra
+  if(words.length){
+    g.font='600 11px ui-sans-serif,system-ui'; g.textAlign='center';
+    for(const w of words){
+      const x=nowX-(now-w.t)*pxPerSec; if(x<KEYW+6||x>Wc) continue;
+      let near=null,bd=.3;
+      for(const p of hist){ const d=Math.abs(p.t-w.t); if(d<bd){ bd=d; near=p; } }
+      const y=(near?y2(near.midi):Hc/2)-26;
+      const tw=g.measureText(w.text).width+10;
+      g.fillStyle='rgba(12,15,20,.85)'; g.fillRect(x-tw/2,y-11,tw,16);
+      g.strokeStyle='rgba(255,255,255,.18)'; g.lineWidth=1; g.strokeRect(x-tw/2+.5,y-10.5,tw,16);
+      g.fillStyle='#e8edf5'; g.fillText(w.text,x,y+1);
+      g.strokeStyle='rgba(255,255,255,.25)'; g.beginPath();
+      g.moveTo(x,y+5); g.lineTo(x,y+18); g.stroke();
+    }
+    g.textAlign='left';
+  }
+
+  // linha do agora
+  g.strokeStyle='rgba(255,255,255,.35)'; g.lineWidth=1;
+  g.beginPath(); g.moveTo(nowX+.5,0); g.lineTo(nowX+.5,Hc); g.stroke();
+
+  // cabeça, alvo e faixa de vibrato
+  if(last && now-lastSeen<0.2){
+    const y=y2(last.midi), yt=y2(last.nearest), c=colorFor(last.cents);
+    if(last.vib&&last.vib.active){
+      const yc=y2(last.vib.mean), half=(last.vib.extent/100)*zoomPx;
+      g.fillStyle='rgba(197,140,255,.15)'; g.fillRect(KEYW,yc-half,Wc-KEYW,half*2);
+      g.strokeStyle='#c58cff'; g.lineWidth=1.5; g.beginPath();
+      g.moveTo(KEYW,yc+.5); g.lineTo(Wc,yc+.5); g.stroke();
+    }
+    g.strokeStyle='rgba(255,255,255,.75)'; g.setLineDash([4,4]); g.lineWidth=1;
+    g.beginPath(); g.moveTo(KEYW,yt+.5); g.lineTo(Wc,yt+.5); g.stroke(); g.setLineDash([]);
+    g.fillStyle=c; g.beginPath(); g.arc(nowX,y,7,0,7); g.fill();
+    g.strokeStyle='rgba(0,0,0,.5)'; g.lineWidth=2; g.stroke();
+    g.fillStyle=c; g.font='700 15px ui-sans-serif,system-ui';
+    g.fillText(label(last.nearest)+'  '+(last.cents>0?'+':'')+last.cents.toFixed(0)+'¢', nowX+14, y+5);
+    let sub=[];
+    if(!last.inKey) sub.push(['FORA DO TOM','#ff6b6b']);
+    if(last.vib&&last.vib.active) sub.push([last.vibWide?'VIBRATO LARGO':'VIBRATO '+last.vib.rate.toFixed(1)+'Hz',
+                                            last.vibWide?'#ffd166':'#c58cff']);
+    sub.forEach(([txt,col],i)=>{ g.fillStyle=col; g.font='700 11px ui-sans-serif,system-ui';
+      g.fillText(txt, nowX+14, y+22+i*14); });
+  }
+
+  drawKeys(lo,hi,sc);
+  drawPrompter();
+  updatePanel(now);
+  updateGameHud();
+  if(recording){
+    g.fillStyle='#ff6b6b'; g.beginPath(); g.arc(KEYW+18,20,6,0,7); g.fill();
+    g.fillStyle='#e8edf5'; g.font='600 12px ui-sans-serif,system-ui';
+    g.fillText('GRAVANDO  '+(now-takeStart).toFixed(1)+'s'+(ghosts.length?'  ·  ref. em cinza':''), KEYW+30, 24);
+  }
+}
+
+/* teleprompter: letra rolando no rodapé; passado colorido pelo placar da palavra */
+function drawPrompter(){
+  promptHits=[];
+  if(!lyr || !lyr.words.length) return;
+  const H=44, y0=Hc-H, cy=y0+H/2+5;
+  g.fillStyle='rgba(10,13,18,.92)'; g.fillRect(0,y0,Wc,H);
+  g.strokeStyle='#28303f'; g.lineWidth=1;
+  g.beginPath(); g.moveTo(0,y0+.5); g.lineTo(Wc,y0+.5); g.stroke();
+  const anchor=Math.max(KEYW+10, Wc*0.30);
+
+  // palavra atual e futuras →
+  let x=anchor;
+  for(let i=Math.max(0,lyr.pos); i<lyr.words.length && x<Wc-10; i++){
+    const cur=(i===lyr.pos);
+    g.font=(cur?'800 17px':'600 13px')+' ui-sans-serif,system-ui';
+    g.fillStyle=cur?'#5aa9ff':'#8e9aae';
+    const tw=g.measureText(lyr.words[i].raw).width;
+    g.fillText(lyr.words[i].raw, x, cy);
+    if(cur){ g.strokeStyle='#5aa9ff'; g.beginPath();      // sublinha a atual
+      g.moveTo(x,cy+5.5); g.lineTo(x+tw,cy+5.5); g.stroke(); }
+    promptHits.push({i, x0:x, x1:x+tw});
+    x+=tw+9;
+  }
+  // palavras já cantadas ←
+  x=anchor-14;
+  g.font='600 13px ui-sans-serif,system-ui';
+  for(let i=(lyr.pos<0?-1:lyr.pos-1); i>=0; i--){
+    const w=lyr.words[i].raw, tw=g.measureText(w).width;
+    x-=tw; if(x<8) break;
+    const s=lyr.scores[i];
+    g.fillStyle = s===null?'#5b6678' : s>=85?'#3ddc97' : s>=60?'#ffd166' : '#ff6b6b';
+    g.fillText(w,x,cy);
+    promptHits.push({i, x0:x, x1:x+tw});
+    x-=9;
+  }
+  g.fillStyle='#5b6678'; g.font='600 9px ui-sans-serif,system-ui';
+  g.fillText('LETRA · clique numa palavra p/ posicionar', 8, y0+12);
+}
+
+function drawKeys(lo,hi,sc){
+  g.fillStyle='#141922'; g.fillRect(0,0,KEYW,Hc);
+  for(let m=lo;m<=hi;m++){
+    const yc=y2(m), h=zoomPx, blk=IS_BLACK(m), inK=sc.has(pc(m));
+    const cur = last && last.nearest===m && performance.now()/1000-lastSeen<0.2;
+    let fill = blk?'#1c222c':'#e9eef6';
+    if(inK) fill = blk?'#24425f':'#dbe9ff';
+    if(cur) fill = colorFor(last.cents);
+    g.fillStyle=fill;
+    g.fillRect(blk?26:6, yc-h/2+1, blk?KEYW-34:KEYW-14, h-2);
+    g.strokeStyle='rgba(0,0,0,.45)'; g.lineWidth=1;
+    g.strokeRect(blk?26.5:6.5, yc-h/2+1.5, blk?KEYW-34:KEYW-14, h-3);
+    if(h>13){
+      g.fillStyle = blk ? (cur?'#04121f':'#9fb2cc') : '#2a3444';
+      g.font=(cur?'700 ':'')+Math.min(12,h-3)+'px ui-sans-serif,system-ui';
+      g.fillText(label(m), blk?32:11, yc+4);
+    }
+  }
+  g.strokeStyle='#28303f'; g.beginPath(); g.moveTo(KEYW+.5,0); g.lineTo(KEYW+.5,Hc); g.stroke();
+}
+
+/* ================= painel ================= */
+function updatePanel(now){
+  const live = last && now-lastSeen<0.25;
+  const tol=+$('vibTol').value;
+  $('zone').style.width = (tol*2)+'%';    // faixa tolerada no medidor de cents
+
+  if(live){
+    const c=colorFor(last.cents);
+    $('noteName').firstChild.nodeValue=nameOf(last.nearest);
+    $('noteAlt').textContent=octOf(last.nearest)+(namingSel.value==='pt'?' · '+EN[pc(last.nearest)]:'');
+    $('noteName').style.color=c;
+    $('hz').textContent=last.f.toFixed(1)+' Hz · alvo '+
+      ((+$('a4').value||440)*Math.pow(2,(last.nearest-69)/12)).toFixed(1)+' Hz';
+    $('pct').textContent=last.pct.toFixed(0)+'%'; $('pct').style.color=c;
+    $('pctBar').style.width=last.pct+'%'; $('pctBar').style.background=c;
+    $('pctHint').textContent = last.vib&&last.vib.active
+      ? 'medido pelo centro do vibrato' : 'medido na altura instantânea';
+    $('needle').style.left=(50+Math.max(-50,Math.min(50,last.cents)))+'%';
+    $('needle').style.background=c;
+    $('dirTxt').textContent = Math.abs(last.cents)<7 ? '✓ na nota'
+      : last.cents>0 ? '▼ está ALTO — desça '+Math.abs(last.cents).toFixed(0)+'¢'
+                     : '▲ está BAIXO — suba '+Math.abs(last.cents).toFixed(0)+'¢';
+    const t=$('inkey');
+    if(last.inKey){ t.textContent='dentro do tom'; t.style.background='rgba(61,220,151,.18)'; t.style.color='#3ddc97'; }
+    else{
+      const sc=scaleSet(); let bn=null,bd=99;
+      for(let d=-6;d<=6;d++){ const m=last.nearest+d; if(sc.has(pc(m))&&Math.abs(d)<bd){ bd=Math.abs(d); bn=m; } }
+      t.textContent='fora do tom → vá para '+label(bn);
+      t.style.background='rgba(255,107,107,.18)'; t.style.color='#ff6b6b';
+    }
+    // vibrato
+    const v=last.vib;
+    if(v&&v.active){
+      const good = v.rate>=4.5&&v.rate<=7.5 && v.extent<=tol && v.reg>=60;
+      const why = v.extent>tol ? 'amplitude alta (±'+v.extent.toFixed(0)+'¢)'
+                : v.rate>7.5 ? 'rápido demais' : v.rate<4.5 ? 'lento demais'
+                : v.reg<60 ? 'irregular' : 'vibrato saudável';
+      $('vibTag').innerHTML='<span class="tag" style="background:'+
+        (good?'rgba(197,140,255,.22);color:#c58cff':'rgba(255,209,102,.18);color:#ffd166')+'">'+
+        why+'</span>';
+      $('vRate').textContent=v.rate.toFixed(1)+' Hz';
+      $('vExt').textContent='±'+v.extent.toFixed(0)+'¢'+(v.extent>tol?' ⚠':'');
+      $('vReg').textContent=v.reg.toFixed(0)+'%';
+      $('vRegBar').style.width=v.reg+'%';
+      $('vRegBar').style.background = v.reg>70?'var(--ok)':v.reg>45?'var(--warn)':'var(--bad)';
+    }else{
+      $('vibTag').innerHTML='<span class="tag">'+(v?'nota reta':'nenhum')+'</span>';
+      $('vRate').textContent=$('vExt').textContent=$('vReg').textContent='—';
+      $('vRegBar').style.width='0';
+    }
+  }else{
+    $('noteName').firstChild.nodeValue='—'; $('noteAlt').textContent='';
+    $('noteName').style.color='var(--txt)';
+    $('hz').textContent = running?'silêncio…':'—';
+    $('pct').textContent='—'; $('pct').style.color='var(--txt)'; $('pctBar').style.width='0';
+    $('pctHint').textContent='';
+    $('needle').style.left='50%'; $('needle').style.background='var(--line)';
+    $('dirTxt').textContent='—';
+    $('vibTag').innerHTML='<span class="tag">nenhum</span>';
+    $('vRate').textContent=$('vExt').textContent=$('vReg').textContent='—';
+    $('vRegBar').style.width='0';
+  }
+
+  if(lyr){
+    $('lyrInfo').textContent = (lyr.pos>=0
+      ? 'palavra '+Math.min(lyr.pos+1,lyr.words.length)+'/'+lyr.words.length
+      : lyr.words.length+' palavras prontas — comece a cantar')+
+      ($('lyrics').checked ? ' · voz: '+recStatus : ' · marque "Letra (beta)" p/ sincronia por voz');
+  }else if($('lyrics').checked){
+    $('lyrInfo').textContent='sem letra salva · voz: '+recStatus;
+  }
+
+  if(detected){
+    $('detKey').textContent=PT[detected.root]+' '+SCALE_PT[detected.mode==='major'?'major':'minor']+
+      ' ('+EN[detected.root]+(detected.mode==='minor'?'m':'')+')';
+    const cf=Math.max(0,Math.min(100,detected.r*100));
+    const weak = detected.contrast<=1.8;
+    const stab = Math.min(100, Math.round((detected.stable||0)/8*100));
+    $('detKey').style.color = weak?'var(--dim)':'var(--txt)';
+    $('detInfo').textContent = weak
+      ? 'pouco tonal — cante a tônica mais tempo ('+detected.frames+' amostras)'
+      : 'confiança '+cf.toFixed(0)+'% · estabilidade '+stab+'%'+
+        (keyApplied?' · travado':($('autoKey').checked?' · firmando…':''));
+  }else if(pcTot){ $('detInfo').textContent='analisando… ('+pcTot+' amostras)'; }
+
+  if(stat.tot){
+    $('sAvg').textContent=(stat.sum/stat.tot).toFixed(0)+'%';
+    $('sIn').textContent=(stat.in/stat.tot*100).toFixed(0)+'%';
+    $('sKey').textContent=(stat.key/stat.tot*100).toFixed(0)+'%';
+    $('sN').textContent=stat.n;
+    $('sRange').textContent=label(stat.lo)+' – '+label(stat.hi);
+  }
+}
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
