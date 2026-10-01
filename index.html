@@ -80,6 +80,10 @@
   .glv button{padding:8px 4px;display:flex;flex-direction:column;gap:2px;align-items:center;font-weight:700}
   .glv button .st{font-size:10px;letter-spacing:1px}
   .glv button.lock{background:var(--panel2);color:#5b6678;border:1px solid var(--line);cursor:default}
+  .gtoast{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);z-index:7;display:none;
+    background:rgba(16,20,28,.96);border:1px solid var(--line);border-radius:14px;padding:16px 28px;
+    text-align:center;font-size:19px;font-weight:700;box-shadow:0 10px 40px rgba(0,0,0,.55);pointer-events:none}
+  .gtoast small{display:block;margin-top:4px;font-size:12px;font-weight:500;color:#8b97a9}
 </style>
 </head>
 <body>
@@ -138,16 +142,18 @@
 
     <div id="gHud" class="gcard" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <b id="gTitle">Fase 1</b><button class="ghost mini" id="gQuit" title="Sair do jogo">✕</button>
+        <b id="gTitle">Fase 1</b>
+        <span style="display:flex;gap:6px"><button class="ghost mini" id="gLvls" title="Escolher outra fase">Fases</button><button class="ghost mini" id="gQuit" title="Sair do jogo">✕</button></span>
       </div>
       <div class="cap" id="gSub" style="margin-top:2px">—</div>
       <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
         <div class="note" id="gNote" style="font-size:42px">—</div>
-        <button class="ghost mini" id="gHear">🔊 ouvir de novo</button>
+        <button id="gHear" title="Tocar a nota de novo (tecla R)">🔊 Ouvir de novo <small style="opacity:.7">(R)</small></button>
       </div>
       <div class="bar" style="margin-top:9px;height:10px"><i id="gHold"></i></div>
       <div class="hint" id="gInfo" style="margin-top:5px;font-size:12px">—</div>
     </div>
+    <div id="gToast" class="gtoast"></div>
     <div id="gLevels" class="gmodal" style="display:none"></div>
     <div id="gRes" class="gmodal" style="display:none"></div>
   </div>
@@ -265,7 +271,7 @@ let ctx=null, analyser=null, buf=null, stream=null, running=false, detTimer=null
 let center=60, zoomPx=26, pxPerSec=130;
 const hist=[];                        // {t,midi,cents,pct,inKey,rms}
 let words=[];                         // {t,text}
-let stat=blankStat(), last=null, lastSeen=0, smMidi=null;
+let stat=blankStat(), last=null, lastSeen=0, smMidi=null, pendMidi=0, pendN=0;
 let segNote=null, segFrames=0;
 const pcw = new Float32Array(12);     // histograma de classes de altura (p/ detectar tom)
 let pcTot=0, detected=null;
@@ -465,7 +471,15 @@ function detect(){
 
   const a4=+$('a4').value||440;
   let midi=69+12*Math.log2(r.f/a4);
-  if(smMidi===null || Math.abs(midi-smMidi)>0.9) smMidi=midi; else smMidi=smMidi*0.6+midi*0.4;
+  // salto grande (>0,9 semitom) só vale se se repetir por 3 quadros (~66ms): um quadro
+  // isolado de oitava/quinta errada é descartado em vez de virar "nota errada" na tela
+  if(smMidi!==null && Math.abs(midi-smMidi)>0.9){
+    if(pendN>0 && Math.abs(midi-pendMidi)<0.9){ pendN++; pendMidi=midi; } else { pendN=1; pendMidi=midi; }
+    if(pendN<3){ if(now-lastSeen>0.18){ last=null; smMidi=null; closeSeg(); wasVoiced=false; rmsPeak=0; } return; }
+    smMidi=midi; pendN=0;
+  }else{
+    pendN=0; smMidi = smMidi===null ? midi : smMidi*0.6+midi*0.4;
+  }
   midi=smMidi;
   lastSeen=now;
   hist.push({t:now, midi, cents:0, pct:0, inKey:true, rms});
@@ -769,28 +783,36 @@ let game=null, gLastT=0;
 // dificuldade progressiva: segurar mais tempo, tolerância mais apertada, mais notas por fase
 function levelParams(n){
   return {
-    hold:+(2+Math.min(3,(n-1)*0.3)).toFixed(1),          // 2s → 5s
-    tol: Math.max(12, Math.round(35-(n-1)*1.2)),         // ±35¢ → ±12¢
-    notes:Math.min(5, 1+Math.floor((n-1)/4)),            // 1 → 5 notas
+    hold:+(1+Math.min(1.5,(n-1)*0.08)).toFixed(1),       // 1s → 2.5s
+    tol: Math.max(15, Math.round(45-(n-1)*1.6)),         // ±45¢ → ±15¢
+    notes:Math.min(7, 5+Math.floor((n-1)/7)),            // 5 notas em sequência → 7
     span: Math.min(9, 3+Math.floor(n/3))                 // saltos maiores nas fases altas
   };
 }
+const GDRAIN=0.5;                       // fora da nota a barra desce a meia velocidade (não zera)
+const GSTAR3=80, GSTAR2=60;             // precisão média p/ 3★ e 2★ — terminar a fase já libera a próxima
 // sorteia notas perto da região que a pessoa realmente canta
 function voiceCenter(){
   if(stat.lo!==null && stat.hi!==null) return Math.round((stat.lo+stat.hi)/2);
   return 60;                                             // Dó4 até conhecermos a voz
 }
+// notas todas diferentes (nem a mesma nota em outra oitava, já que o jogo aceita qualquer oitava)
 function genTargets(p){
-  const c=Math.max(50,Math.min(76,voiceCenter())), t=[];
-  let cur=c+Math.floor(Math.random()*5)-2;
-  for(let i=0;i<p.notes;i++){
-    if(i>0){
-      let nxt,guard=0;
-      do{ nxt=cur+Math.floor(Math.random()*(2*p.span+1))-p.span; guard++; }
-      while((nxt===cur||Math.abs(nxt-c)>7)&&guard<40);
-      cur=nxt;
-    }
-    t.push(Math.max(48,Math.min(79,cur)));
+  const c=Math.max(50,Math.min(76,voiceCenter()));
+  let cur=Math.max(48,Math.min(79,c+Math.floor(Math.random()*5)-2));
+  const t=[cur], used=new Set([cur%12]);
+  const free=(lo,hi)=>{
+    const cs=[];
+    for(let m=Math.max(48,lo);m<=Math.min(79,hi);m++)
+      if(m!==cur && !used.has(m%12) && Math.abs(m-c)<=7) cs.push(m);
+    return cs;
+  };
+  while(t.length<p.notes){
+    let cs=free(cur-p.span,cur+p.span);
+    if(!cs.length) cs=free(c-7,c+7);          // vizinhança esgotada: qualquer nota livre da região
+    if(!cs.length){ used.clear(); continue; } // todas as 12 notas usadas: recomeça a contagem
+    cur=cs[Math.floor(Math.random()*cs.length)];
+    t.push(cur); used.add(cur%12);
   }
   return t;
 }
@@ -810,7 +832,7 @@ function playTone(midi,dur=1.4){
 async function gameStart(n){
   if(!running){ if(!await openStream()) return; }
   const p=levelParams(n);
-  game={level:n,p,targets:genTargets(p),idx:0,held:0,out:0,sum:0,cnt:0,
+  game={level:n,p,targets:genTargets(p),idx:0,held:0,sum:0,cnt:0,
         noteScores:[],state:'sing',muteUntil:0};
   gLastT=0;
   $('gRes').style.display='none'; $('gLevels').style.display='none';
@@ -821,10 +843,30 @@ function playTarget(){
   game.muteUntil=performance.now()/1000+1.6;   // não julgar enquanto o tom de referência toca
   playTone(game.targets[game.idx],1.4);
 }
-function gameQuit(){ game=null; $('gHud').style.display='none'; $('gRes').style.display='none'; }
+function gameQuit(){ game=null; $('gHud').style.display='none'; $('gRes').style.display='none'; $('gToast').style.display='none'; }
 $('gQuit').onclick=gameQuit;
+$('gLvls').onclick=()=>renderLevels();
+// fase atual = a primeira ainda não concluída
+function currentLevel(){ const s=gload().stars; let n=1; while(n<NLEVELS && (s[n]||0)>=1) n++; return n; }
+function gToast(html,ms){
+  const el=$('gToast'); el.innerHTML=html; el.style.display='block';
+  clearTimeout(gToast.t); gToast.t=setTimeout(()=>el.style.display='none',ms);
+}
 $('gHear').onclick=()=>{ if(game&&game.state==='sing') playTarget(); };
-$('gameBtn').onclick=renderLevels;
+addEventListener('keydown',e=>{               // tecla R = ouvir a nota de novo
+  if(e.key.toLowerCase()!=='r'||e.ctrlKey||e.metaKey||e.altKey) return;
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if(game&&game.state==='sing') playTarget();
+});
+$('gameBtn').onclick=()=>{ if(!game) gameStart(currentLevel()); };   // abre direto na fase atual, sem menu
+
+// cents até o alvo, na oitava mais próxima da voz: quem canta mais grave/agudo que a
+// nota tocada (voz masculina x feminina) não fica preso numa nota que não alcança
+function gameCents(tgt){
+  let d=last.judge-tgt;                        // judge = centro do vibrato, se houver
+  d-=12*Math.round(d/12);
+  return d*100;
+}
 
 // chamado a cada quadro de detecção (22ms) com voz detectada
 function gameTick(now){
@@ -832,63 +874,68 @@ function gameTick(now){
   const dt = gLastT? Math.min(0.06,now-gLastT) : 0.022;
   gLastT=now;
   if(now<game.muteUntil || !last) return;
+  if($('gLevels').style.display==='flex') return;       // escolhendo fase: jogo em pausa
   const tgt=game.targets[game.idx];
-  const dc=(last.midi-tgt)*100;                // cents em relação ao alvo
+  const dc=gameCents(tgt);
   if(Math.abs(dc)<=game.p.tol){
-    game.held+=dt; game.out=0;
+    game.held+=dt;
     game.sum+=Math.max(0,100-Math.abs(dc)*2); game.cnt++;
   }else{
-    game.out+=dt;
-    if(game.out>0.35) game.held=0;             // saiu da nota: recomeça a segurar
+    game.held=Math.max(0,game.held-dt*GDRAIN);  // escorrega devagar em vez de zerar
   }
   if(game.held>=game.p.hold){
     game.noteScores.push(game.cnt?game.sum/game.cnt:0);
-    game.idx++; game.held=0; game.out=0; game.sum=0; game.cnt=0;
+    game.idx++; game.held=0; game.sum=0; game.cnt=0;
     if(game.idx>=game.targets.length) gameFinish(); else playTarget();
   }
 }
 function gameFinish(){
   const avg=game.noteScores.reduce((a,b)=>a+b,0)/game.noteScores.length;
-  const stars = avg>=90?3 : avg>=80?2 : 1;
+  const stars = avg>=GSTAR3?3 : avg>=GSTAR2?2 : 1;
   const prog=gload();
   prog.stars[game.level]=Math.max(prog.stars[game.level]||0,stars);
   gsave(prog);
   game.state='done'; game.result={avg,stars};
-  showResult();
+  const next=game.level+1, starsHtml='<span style="color:#ffd166;letter-spacing:3px">'+'★'.repeat(stars)+
+    '<span style="color:#3a4356">'+'☆'.repeat(3-stars)+'</span></span>';
+  if(next>NLEVELS){ showResult(); return; }               // última fase: aí sim, tela de fim
+  // passou de fase: só um aviso rápido e já abre a próxima, sem menu nem botão
+  $('gHud').style.display='none';
+  gToast('🎉 Fase '+game.level+' concluída<br>'+starsHtml+'<small>'+avg.toFixed(0)+'% de precisão · indo pra fase '+next+'…</small>', 2300);
+  const me=game;
+  setTimeout(()=>{ if(game===me) gameStart(next); }, 2300);   // saiu do jogo nesse meio tempo? não segue
 }
-function showResult(){
+function showResult(){            // só no fim das 20 fases
   const r=game.result, box=$('gRes');
-  const next=game.level+1, canNext=r.stars>=3&&next<=NLEVELS;
   box.innerHTML='<div style="text-align:center">'+
     '<div style="font-size:44px;letter-spacing:5px;color:#ffd166">'+'★'.repeat(r.stars)+
       '<span style="color:#3a4356">'+'☆'.repeat(3-r.stars)+'</span></div>'+
     '<div style="font-size:24px;font-weight:700;margin-top:4px">'+r.avg.toFixed(1)+'%</div>'+
     '<div class="hint" style="margin-top:6px;font-size:12px">'+
-      (r.stars>=3?'Fase '+game.level+' concluída — próxima liberada!':'São precisas 3 ★ (média ≥90%) pra liberar a próxima.')+'</div>'+
+      '🏆 Você terminou todas as '+NLEVELS+' fases!'+
+      (r.stars<3?'<br>Repita pra ganhar mais ★ (3 ★ = precisão média ≥'+GSTAR3+'%).':'')+'</div>'+
     '<div style="display:flex;gap:8px;justify-content:center;margin-top:16px">'+
       '<button class="ghost" id="gAgain">↻ Repetir</button>'+
-      (canNext?'<button id="gNext">Próxima ▶</button>':'')+
       '<button class="ghost" id="gMenu">Fases</button></div></div>';
   box.style.display='flex'; $('gHud').style.display='none';
   $('gAgain').onclick=()=>gameStart(game.level);
-  if(canNext) $('gNext').onclick=()=>gameStart(next);
   $('gMenu').onclick=()=>{ game=null; box.style.display='none'; renderLevels(); };
 }
 function renderLevels(){
   const prog=gload(), box=$('gLevels');
   let html='<div><div style="display:flex;justify-content:space-between;align-items:center">'+
     '<b style="font-size:16px">🎮 Treino de pitch — fases</b><button class="ghost mini" id="gClose">✕</button></div>'+
-    '<div class="hint" style="margin-top:6px">Ele toca uma nota, você canta e <b>segura</b> ela cravada. '+
-    '3 ★ (média ≥90%) liberam a próxima fase. As notas são sorteadas na sua região vocal — '+
-    'cante um pouco antes pra ele conhecer sua voz.</div><div class="glv">';
+    '<div class="hint" style="margin-top:6px">Cada fase tem várias notas <b>diferentes em sequência</b>: ele toca, você canta e '+
+    '<b>segura</b> até a barra encher. Terminou a fase, a próxima abre sozinha; as ★ medem a precisão '+
+    '(3 ★ = média ≥'+GSTAR3+'%). Pode cantar em qualquer oitava. <b>🔊 / tecla R</b> toca a nota de novo.</div><div class="glv">';
   for(let n=1;n<=NLEVELS;n++){
     const st=prog.stars[n]||0;
-    const unlocked = n===1 || (prog.stars[n-1]||0)>=3;
+    const unlocked = n===1 || (prog.stars[n-1]||0)>=1;
     const p=levelParams(n);
     html += unlocked
       ? '<button data-l="'+n+'" title="segure '+p.hold+'s · ±'+p.tol+'¢ · '+p.notes+' nota(s)">'+n+
         '<span class="st" style="color:#ffd166">'+'★'.repeat(st)+'☆'.repeat(3-st)+'</span></button>'
-      : '<button class="lock" title="faça 3 ★ na fase anterior">🔒<span class="st">'+n+'</span></button>';
+      : '<button class="lock" title="termine a fase anterior">🔒<span class="st">'+n+'</span></button>';
   }
   html+='</div></div>';
   box.innerHTML=html; box.style.display='flex';
@@ -900,12 +947,15 @@ function updateGameHud(){
   if(!game||game.state!=='sing') return;
   const p=game.p, tgt=game.targets[game.idx];
   $('gTitle').textContent='Fase '+game.level;
-  $('gSub').textContent='nota '+(game.idx+1)+' de '+p.notes+' · segure '+p.hold+'s · tolerância ±'+p.tol+'¢';
+  const rest=p.notes-game.idx-1;                // notas que faltam DEPOIS desta
+  $('gSub').innerHTML='<span style="color:#3ddc97">'+'●'.repeat(game.idx)+'</span>'+
+    '<span style="color:#ffd166">●</span><span style="color:#4a5568">'+'●'.repeat(rest)+'</span> '+
+    '<b style="color:#c8d1df">'+(rest>0?'faltam '+rest:'última nota!')+'</b> · segure '+p.hold+'s · ±'+p.tol+'¢';
   $('gNote').textContent=label(tgt);
   const frac=Math.min(1,game.held/p.hold);
   $('gHold').style.width=(frac*100)+'%';
   $('gHold').style.background = frac>0 ? 'var(--ok)' : 'var(--acc)';
-  const dc = last ? (last.midi-tgt)*100 : null;
+  const dc = last ? gameCents(tgt) : null;
   $('gInfo').textContent =
     performance.now()/1000<game.muteUntil ? '👂 ouça a nota…'
     : dc===null ? '🎤 cante '+label(tgt)+'…'
@@ -1020,13 +1070,21 @@ function draw(){
 
   // alvo do jogo: faixa dourada de tolerância em volta da nota pedida
   if(game && game.state==='sing'){
-    const tgt=game.targets[game.idx], yc=y2(tgt);
-    const tolPx=Math.max(3, game.p.tol/100*zoomPx);
-    g.fillStyle='rgba(255,209,102,.14)'; g.fillRect(KEYW,yc-tolPx,Wc-KEYW,tolPx*2);
-    g.strokeStyle='#ffd166'; g.lineWidth=1.5; g.setLineDash([7,5]);
-    g.beginPath(); g.moveTo(KEYW,yc+.5); g.lineTo(Wc,yc+.5); g.stroke(); g.setLineDash([]);
-    g.fillStyle='#ffd166'; g.font='700 12px ui-sans-serif,system-ui';
-    g.fillText('🎯 '+label(tgt), KEYW+8, yc-tolPx-5);
+    const tgt=game.targets[game.idx];
+    const band=(m,alpha)=>{
+      const yc=y2(m), tolPx=Math.max(3, game.p.tol/100*zoomPx);
+      g.globalAlpha=alpha;
+      g.fillStyle='rgba(255,209,102,.14)'; g.fillRect(KEYW,yc-tolPx,Wc-KEYW,tolPx*2);
+      g.strokeStyle='#ffd166'; g.lineWidth=1.5; g.setLineDash([7,5]);
+      g.beginPath(); g.moveTo(KEYW,yc+.5); g.lineTo(Wc,yc+.5); g.stroke(); g.setLineDash([]);
+      g.fillStyle='#ffd166'; g.font='700 12px ui-sans-serif,system-ui';
+      g.fillText('🎯 '+label(m), KEYW+8, yc-tolPx-5);
+      g.globalAlpha=1;
+    };
+    band(tgt,1);
+    // voz em outra oitava: mostra também a faixa da mesma nota na oitava dela
+    const alt = last ? tgt+12*Math.round((last.judge-tgt)/12) : tgt;
+    if(alt!==tgt) band(alt,.6);
   }
 
   // trilha cantada (linha instantânea = mostra a onda do vibrato)
