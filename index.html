@@ -128,6 +128,9 @@
       <span id="lyrLagTxt" style="font-size:12px;width:44px">450ms</span>
     </div>
     <div class="grp"><label>Lá4</label><input id="a4" type="number" value="440" min="415" max="465" style="width:60px"> Hz</div>
+    <div class="grp"><label title="Correção da leitura do seu microfone, medida no Calibrar">Ajuste mic</label>
+      <span id="micOffTxt" style="font-size:12px;min-width:38px">0¢</span>
+      <button class="ghost mini" id="calBtn" title="Mede se o app está lendo sua voz mais baixa/alta que o tom">Calibrar</button></div>
     <div class="grp"><label>Sensib.</label><input id="gate" type="range" min="1" max="40" value="10"></div>
     <div class="grp"><label>Zoom</label><input id="zoom" type="range" min="12" max="40" value="26"></div>
     <div class="grp"><label title="Velocidade com que a trilha rola na tela">Rolagem</label><input id="speed" type="range" min="40" max="300" value="130"></div>
@@ -153,6 +156,7 @@
       <div class="bar" style="margin-top:9px;height:10px"><i id="gHold"></i></div>
       <div class="hint" id="gInfo" style="margin-top:5px;font-size:12px">—</div>
     </div>
+    <div id="calModal" class="gmodal" style="display:none"></div>
     <div id="gToast" class="gtoast"></div>
     <div id="gLevels" class="gmodal" style="display:none"></div>
     <div id="gRes" class="gmodal" style="display:none"></div>
@@ -271,7 +275,7 @@ let ctx=null, analyser=null, buf=null, stream=null, running=false, detTimer=null
 let center=60, zoomPx=26, pxPerSec=130;
 const hist=[];                        // {t,midi,cents,pct,inKey,rms}
 let words=[];                         // {t,text}
-let stat=blankStat(), last=null, lastSeen=0, smMidi=null, pendMidi=0, pendN=0;
+let stat=blankStat(), last=null, lastSeen=0, smMidi=null, pendMidi=0, pendN=0, micOff=0;
 let segNote=null, segFrames=0;
 const pcw = new Float32Array(12);     // histograma de classes de altura (p/ detectar tom)
 let pcTot=0, detected=null;
@@ -339,6 +343,7 @@ async function openStream(){
   const tr=stream.getAudioTracks()[0];
   if(tr) tr.onended=()=>{ if(running){ teardown(); setOff('O microfone foi desconectado.'); listMics(); } };
   await listMics();
+  loadMicOff();
   if($('lyrics').checked) startRec();
   return true;
   function fail(e){ $('msg').innerHTML='Não consegui acessar o microfone.<br><small>'+e.message+'</small>';
@@ -470,7 +475,7 @@ function detect(){
   }
 
   const a4=+$('a4').value||440;
-  let midi=69+12*Math.log2(r.f/a4);
+  let midi=69+12*Math.log2(r.f/a4)+micOff/100;     // micOff: correção medida no Calibrar
   // salto grande (>0,9 semitom) só vale se se repetir por 3 quadros (~66ms): um quadro
   // isolado de oitava/quinta errada é descartado em vez de virar "nota errada" na tela
   if(smMidi!==null && Math.abs(midi-smMidi)>0.9){
@@ -510,6 +515,7 @@ function detect(){
   if(segNote===nearest) segFrames++; else { closeSeg(); segNote=nearest; segFrames=1; }
   center += (midi-center)*0.06;
   gameTick(now);
+  calTick(now);
 }
 function closeSeg(){ if(segNote!==null&&segFrames>=5) stat.n++; segNote=null; segFrames=0; }
 
@@ -964,6 +970,126 @@ function updateGameHud(){
   const c = dc===null?'#6b7688':Math.abs(dc)<=p.tol?'#3ddc97':'#ffd166';
   $('gInfo').style.color=c;
 }
+
+/* ================= calibrar microfone ================= */
+// Toca um tom contínuo, a pessoa canta junto (em uníssono, de fone) e medimos quantos cents
+// o app lê abaixo/acima. Separa "o medidor está desviado" de "a nota escapa sem referência".
+const MOS='afinador.micoff.v1', CAL_WARM=1.5, CAL_LEN=6.5;
+const micKey=()=>micSel.value||'padrao';
+function showMicOff(){ $('micOffTxt').textContent=(micOff>0?'+':'')+micOff+'¢'; }
+function loadMicOff(){
+  try{ micOff=+((JSON.parse(localStorage.getItem(MOS))||{})[micKey()])||0; }catch(e){ micOff=0; }
+  showMicOff();
+}
+function saveMicOff(v){
+  micOff=Math.max(-100,Math.min(100,Math.round(v)));
+  try{ const o=JSON.parse(localStorage.getItem(MOS))||{}; o[micKey()]=micOff; localStorage.setItem(MOS,JSON.stringify(o)); }catch(e){}
+  showMicOff();
+}
+micSel.addEventListener('change',loadMicOff);
+loadMicOff();
+
+let cal=null, calTone=null;
+function calToneStart(midi){
+  const a4=+$('a4').value||440, t=ctx.currentTime;
+  const o=ctx.createOscillator(), gn=ctx.createGain();
+  o.type='sine'; o.frequency.value=a4*Math.pow(2,(midi-69)/12);
+  gn.gain.setValueAtTime(0,t); gn.gain.linearRampToValueAtTime(.12,t+.1);
+  o.connect(gn); gn.connect(ctx.destination); o.start(t);
+  calTone={o,gn};
+}
+function calToneStop(){
+  if(!calTone||!ctx) { calTone=null; return; }
+  try{ const t=ctx.currentTime; calTone.gn.gain.cancelScheduledValues(t); calTone.gn.gain.setTargetAtTime(0,t,.04); calTone.o.stop(t+.25); }catch(e){}
+  calTone=null;
+}
+function calTick(now){                      // chamado por quadro com voz detectada
+  if(!cal||cal.state!=='run') return;
+  let d=(last.judge-micOff/100)-cal.tone;   // leitura CRUA (sem o ajuste atual) menos o tom
+  d-=12*Math.round(d/12);                   // aceita outra oitava
+  cal.live=d*100; cal.liveT=now;
+  if(now-cal.t0>=CAL_WARM) cal.devs.push(d*100);
+}
+function calClose(){ calToneStop(); cal=null; $('calModal').style.display='none'; }
+function calShow(inner){ const b=$('calModal'); b.innerHTML='<div style="text-align:center">'+inner+'</div>'; b.style.display='flex'; }
+async function calOpen(){
+  if(game) gameQuit();
+  if(!running){ if(!await openStream()) return; }
+  const cur=micOff?'<div class="hint" style="margin-top:8px">Ajuste atual: <b>'+(micOff>0?'+':'')+micOff+'¢</b></div>':'';
+  calShow('<b style="font-size:16px">🎯 Calibrar o microfone</b>'+
+    '<div class="hint" style="margin:10px 0;font-size:12px;text-align:left;line-height:1.5">'+
+    '1. <b>Coloque o fone de ouvido</b> (sem fone, o tom vaza pro microfone e estraga a medida).<br>'+
+    '2. Vou tocar uma nota contínua. <b>Cante a mesma nota</b>, ajustando até a sua voz "colar" no tom '+
+    '(sem tremido/batimento entre os dois).<br>'+
+    '3. Segure firme por uns 8 segundos.</div>'+cur+
+    '<div style="display:flex;gap:8px;justify-content:center;margin-top:14px">'+
+    '<button id="calGo">▶ Começar</button>'+
+    (micOff?'<button class="ghost" id="calZero">Zerar ajuste</button>':'')+
+    '<button class="ghost" id="calX">Cancelar</button></div>');
+  $('calGo').onclick=calRun; $('calX').onclick=calClose;
+  if(micOff) $('calZero').onclick=()=>{ saveMicOff(0); calOpen(); };
+}
+function calRun(){
+  const tone=Math.max(52,Math.min(72,Math.round(voiceCenter())));
+  cal={state:'run',tone,t0:performance.now()/1000,devs:[],live:null,liveT:0};
+  calToneStart(tone);
+  calShow('<b style="font-size:16px">🎵 Cante junto com o tom: '+label(tone)+'</b>'+
+    '<div id="calLive" style="font-size:34px;font-weight:700;margin:14px 0 4px">—</div>'+
+    '<div id="calSay" class="hint" style="font-size:12px;min-height:16px">segure a nota…</div>'+
+    '<div class="bar" style="margin-top:12px;height:8px"><i id="calBar" style="width:0"></i></div>'+
+    '<div style="margin-top:12px"><button class="ghost" id="calX">Cancelar</button></div>');
+  $('calX').onclick=calClose;
+  const timer=setInterval(()=>{
+    if(!cal||cal.state!=='run'){ clearInterval(timer); return; }
+    const now=performance.now()/1000, el=now-cal.t0, tot=CAL_WARM+CAL_LEN;
+    $('calBar').style.width=Math.min(100,el/tot*100)+'%';
+    const L=$('calLive'), S=$('calSay');
+    if(!cal.liveT || now-cal.liveT>0.3){ L.textContent='—'; L.style.color='#6b7688'; S.textContent=el<CAL_WARM?'segure a nota…':'não estou te ouvindo'; }
+    else{
+      const c=cal.live; L.textContent=(c>0?'+':'')+c.toFixed(0)+'¢';
+      L.style.color=Math.abs(c)<=10?'#3ddc97':'#ffd166';
+      S.textContent= el<CAL_WARM ? 'ajuste até colar no tom…' : Math.abs(c)<=10?'colado no tom ✓': c<0?'o app te lê MAIS BAIXO que o tom':'o app te lê MAIS ALTO que o tom';
+    }
+    if(el>=tot){ clearInterval(timer); calFinish(); }
+  },100);
+}
+function calFinish(){
+  calToneStop(); cal.state='done';
+  const d=cal.devs.filter(x=>Math.abs(x)<=100).sort((a,b)=>a-b), n=d.length;
+  const btns=(extra)=>'<div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">'+extra+
+    '<button class="ghost" id="calAgain">↻ Medir de novo</button><button class="ghost" id="calX">Fechar</button></div>';
+  const wire=()=>{ $('calAgain').onclick=calOpen; $('calX').onclick=calClose; };
+  if(n<80){
+    calShow('<b style="font-size:16px">Quase não ouvi sua voz</b><div class="hint" style="margin-top:8px;font-size:12px">'+
+      'Cante mais perto/mais alto ou aumente a <b>Sensib.</b> e tente de novo.</div>'+btns('')); wire(); return;
+  }
+  const med=d[Math.floor(n/2)], iqr=d[Math.floor(n*.75)]-d[Math.floor(n*.25)];
+  const abs=Math.abs(med).toFixed(0);
+  let head, body, apply='';
+  const eff=med+micOff;                       // o que o app lê COM o ajuste atual
+  if(micOff && Math.abs(eff)<6){
+    head='✅ Com o ajuste de '+(micOff>0?'+':'')+micOff+'¢ está certinho';
+    body='Sem o ajuste, o app te leria '+abs+'¢ '+(med<0?'abaixo':'acima')+' do tom. Agora a leitura está no tom.';
+  }else if(Math.abs(med)<6){
+    const m0=Math.round(med)||0;
+    head='✅ Leitura certinha ('+(m0>0?'+':'')+m0+'¢)';
+    body='O app está lendo sua voz no tom. Se no jogo a nota parece cair, é ela escapando <i>depois</i> que o tom para '+
+         '(acontece com todo mundo): use <b>🔊 / tecla R</b> pra ouvir de novo no meio da nota.';
+  }else{
+    head=abs+'¢ '+(med<0?'ABAIXO':'ACIMA')+' do tom';
+    body='Se você ouviu sua voz <b>colada no tom</b> (sem tremido), então o microfone/medidor está lendo '+
+         (med<0?'mais baixo':'mais alto')+' que a realidade — dá pra corrigir. '+
+         'Se ainda tinha tremido entre sua voz e o tom, repita a medida.';
+    apply='<button id="calApply">Aplicar ajuste ('+(med<0?'+':'−')+abs+'¢)</button>';
+  }
+  if(iqr<2) body+='<br><span style="color:#ffd166">⚠ Medida certinha demais: pode ser o tom vazando do alto-falante pro microfone. Use fone.</span>';
+  else if(iqr>40) body+='<br><span style="color:#ffd166">⚠ Sua nota oscilou bastante ('+iqr.toFixed(0)+'¢); a medida pode não ser confiável.</span>';
+  calShow('<b style="font-size:17px">'+head+'</b><div class="hint" style="margin-top:8px;font-size:12px;text-align:left;line-height:1.5">'+body+
+    '<br>('+n+' leituras, variação ±'+(iqr/2).toFixed(0)+'¢)</div>'+btns(apply));
+  wire();
+  if(apply) $('calApply').onclick=()=>{ saveMicOff(-med); calClose(); gToast('Ajuste do mic: '+(micOff>0?'+':'')+micOff+'¢<small>vale pra este microfone</small>',2600); };
+}
+$('calBtn').onclick=calOpen;
 
 /* ================= desenho ================= */
 const cv=$('cv'), g=cv.getContext('2d');
